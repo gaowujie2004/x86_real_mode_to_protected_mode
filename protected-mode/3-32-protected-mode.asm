@@ -35,7 +35,7 @@ SECTION MBR_CODE
 
     ;导致崩溃
     ;mov word [cs:gpt_limit], 15; 界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
-    mov word [cs:gpt_limit+0x7c00], 15; 界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
+    mov word [cs:gpt_limit+0x7c00], 23; 界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
 
     ;3.将GDT首地址和界限载入GDTR
     lgdt [cs:gpt_limit+0x7c00]
