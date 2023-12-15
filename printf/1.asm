@@ -5,29 +5,29 @@ stack_seg_sel       equ     0x10               ;0b00000000_00010_000，栈段选
 all_data_seg_sel    equ     0x18               ;0b00000000_00011_000，4GB数据段选择子
 
 
-SECTION MBR_CODE vstart=0x7c00
+SECTION MBR_CODE
     mov ax, cs
     mov ss, ax
     mov sp, 0x7c00
 
-    mov bx, [cs:pgdt+0x02]
+    mov bx, [cs:pgdt+0x7c00+0x02]
     ;2.向GDT写入段描述符
     ;#0空描述符，CPU的规定
     mov dword [bx+0x00], 0x0000_0000
     mov dword [bx+0x04], 0x0000_0000 
-    ;#1 保护模式下的代码段描述符
-    mov dword [bx+0x08], 0x7c00_01ff
+    ;#1 保护模式下的代码段描述符                   ;TODO：大坑啊，SECTION vstart=0x7c00，此时代码段描述符的基地址应该是0，那段界限也该调整了，不能是0x7c00
+    mov dword [bx+0x08], 0x7c00_01ff            
     mov dword [bx+0x0c], 0x0040_9800
-    ;#2 栈段
-    mov dword [bx+0x10], 0x7000_0c00
+    ;#2 栈段                                     ;TODO：向上扩展的栈段。段的扩展方向只是用来确定边界，与栈的push方向无关
+    mov dword [bx+0x10], 0x7000_0bff
     mov dword [bx+0x14], 0x0040_9200
     ;#3 0-4GB全局数据描述符
     mov dword [bx+0x18], 0x0000_FFFF
     mov dword [bx+0x1c], 0x00CF_9200
 
-    mov word [cs:pgdt], 4*8-1                      ;界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
+    mov word [cs:pgdt+0x7c00], 4*8-1                    ;界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
     ;3.将GDT首地址和界限载入GDTR
-    lgdt [cs:pgdt]
+    lgdt [cs:pgdt+0x7c00]
 
     ;4.打开A20地址线
     in al,0x92                                   ;南桥芯片内的端口
@@ -43,6 +43,16 @@ SECTION MBR_CODE vstart=0x7c00
     or  eax, 1
     mov cr0, eax
 
+
+    xchg bx, bx
+
+    ;7.刷新CS段描述符高速缓存器，让默认操作尺寸为32位，
+    jmp code_seg_sel:flush              ;CR0 PE位控制寻找方式，当前PE=1，描述符寻址
+                                                ;段的位置，现在是选择子了
+
+    ;8.保护模式，寻址模式将发生改变，不再是段地址*16+有效地址得到物理地址；段寄存器的内容现在是选择子，用来在GDT中选择一个描述符放入段描述符高速缓冲区
+    [bits 32]  
+ flush: 
     ;刷新其他段的选择器
     mov ax, stack_seg_sel
     mov ss, ax
@@ -50,15 +60,7 @@ SECTION MBR_CODE vstart=0x7c00
     mov ax, all_data_seg_sel
     mov ds, ax
 
-    xchg bx, bx 
-    ;7.刷新CS段描述符高速缓存器，让默认操作尺寸为32位，
-    jmp code_seg_sel:.flush              ;CR0 PE位控制寻找方式，当前PE=1，描述符寻址
-                                                ;段的位置，现在是选择子了
-
-    ;8.保护模式，寻址模式将发生改变，不再是段地址*16+有效地址得到物理地址；段寄存器的内容现在是选择子，用来在GDT中选择一个描述符放入段描述符高速缓冲区
-    [bits 32]  
- .flush: 
-    mov ebx, test_string
+    mov ebx, test_string + 0x7c00                        ;TODO：ds是0-4GB选择子，基地址是0。偏移量可要注意了
     call put_string
     jmp $
     hlt                                         ;屏蔽可屏蔽中断，低功耗将不会被打破。
