@@ -4,6 +4,9 @@ code_seg_sel        equ     0x08               ;0b00000000_00001_000，代码段
 stack_seg_sel       equ     0x10               ;0b00000000_00010_000，栈段选择子
 all_data_seg_sel    equ     0x18               ;0b00000000_00011_000，4GB数据段选择子
 
+;TODO-Tips
+;TODO-BUG
+;TODO-Optimize
 
 SECTION MBR_CODE
     mov ax, cs
@@ -15,10 +18,10 @@ SECTION MBR_CODE
     ;#0空描述符，CPU的规定
     mov dword [bx+0x00], 0x0000_0000
     mov dword [bx+0x04], 0x0000_0000 
-    ;#1 保护模式下的代码段描述符                   ;TODO：大坑啊，SECTION vstart=0x7c00，此时代码段描述符的基地址应该是0，那段界限也该调整了，不能是0x7c00
+    ;#1 保护模式下的代码段描述符                   ;TODO-BUG：大坑啊，SECTION vstart=0x7c00，此时代码段描述符的基地址应该是0，那段界限也该调整了，不能是0x7c00
     mov dword [bx+0x08], 0x7c00_01ff            
     mov dword [bx+0x0c], 0x0040_9800
-    ;#2 栈段                                     ;TODO：向上扩展的栈段。段的扩展方向只是用来确定边界，与栈的push方向无关
+    ;#2 栈段                                     ;TODO-Tips：向上扩展的栈段。段的扩展方向只是用来确定边界，与栈的push方向无关
     mov dword [bx+0x10], 0x7c00_fffe
     mov dword [bx+0x14], 0x00cf_9600
     ;#3 0-4GB全局数据描述符
