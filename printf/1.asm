@@ -19,8 +19,8 @@ SECTION MBR_CODE
     mov dword [bx+0x08], 0x7c00_01ff            
     mov dword [bx+0x0c], 0x0040_9800
     ;#2 栈段                                     ;TODO：向上扩展的栈段。段的扩展方向只是用来确定边界，与栈的push方向无关
-    mov dword [bx+0x10], 0x7000_0bff
-    mov dword [bx+0x14], 0x0040_9200
+    mov dword [bx+0x10], 0x7c00_fffe
+    mov dword [bx+0x14], 0x00cf_9600
     ;#3 0-4GB全局数据描述符
     mov dword [bx+0x18], 0x0000_FFFF
     mov dword [bx+0x1c], 0x00CF_9200
@@ -56,7 +56,7 @@ SECTION MBR_CODE
     ;刷新其他段的选择器
     mov ax, stack_seg_sel
     mov ss, ax
-    mov sp, 0x7c00
+    xor esp, esp
     mov ax, all_data_seg_sel
     mov ds, ax
 
