@@ -61,8 +61,10 @@ SECTION MBR_CODE vstart=0x7c00
 
     ;8.保护模式，寻址模式将发生改变，不再是段地址*16+有效地址得到物理地址；段寄存器的内容现在是选择子，用来在GDT中选择一个描述符放入段描述符高速缓冲区
     [bits 32]  
- .flush:   
-    mov eax, 90
+ .flush: 
+    mov ebx, test_string
+    call put_string
+    jmp $
     hlt                                         ;屏蔽可屏蔽中断，低功耗将不会被打破。
     
     
