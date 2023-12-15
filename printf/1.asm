@@ -47,7 +47,7 @@ SECTION MBR_CODE
     mov cr0, eax
 
 
-    xchg bx, bx
+    xchg bx, bx                                 ;TODO-Tips: Bochs的魔术断点，这条指令不会对bx做任何修改
 
     ;7.刷新CS段描述符高速缓存器，让默认操作尺寸为32位，
     jmp code_seg_sel:flush                      ;CR0 PE位控制寻找方式，当前PE=1，描述符寻址
