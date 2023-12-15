@@ -141,8 +141,9 @@ put_char:                                       ;输入：cl=ASCII码
     mov ax, all_data_seg_sel
     mov ds, ax                     
     mov esi, 0xb_8000
+    xor eax, eax                                ;eax的高位可能不干净，清楚
     mov ax, bx
-    shl eax, 1                                   ;乘2
+    shl eax, 1                                  ;乘2
     mov [esi + eax], cl    
     add bx, 1                                   ;推进光标
 
