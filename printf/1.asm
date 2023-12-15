@@ -1,12 +1,8 @@
-; 目标：printf函数
-
+; 目标：put_string函数
 
 code_seg_sel        equ     0x10               ;0b00000000_00010_000，代码段选择子
 stack_seg_sel       equ     0x18               ;0b00000000_00011_000，栈段选择子
 all_data_seg_sel    equ     0x20               ;0b00000000_00100_000，4GB数据段选择子
-
-
-
 
 
 SECTION MBR_CODE vstart=0x7c00
