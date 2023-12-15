@@ -60,8 +60,12 @@ SECTION MBR_CODE
     mov ax, all_data_seg_sel
     mov ds, ax
 
-    mov ebx, test_string + 0x7c00               ;TODO：ds是0-4GB选择子，基地址是0。偏移量可要注意了
+    mov ebx, msg1 + 0x7c00                      ;TODO：ds是0-4GB选择子，基地址是0。偏移量可要注意了
     call put_string
+
+    mov ebx, msg2 + 0x7c00
+    call put_string
+
     jmp $
     hlt                                         ;屏蔽可屏蔽中断，低功耗将不会被打破。
     
@@ -69,9 +73,12 @@ SECTION MBR_CODE
     pgdt    dw 00                               ;GDT界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
             dd 0x0000_7e00                      ;全局描述符表，安装起始位置   
     
-    test_string db 'GaoWuJie2004', 0x0d,0x0a
-                db '@QinBeiLei',   0x0d,0x0a
-                db '@2019-10-13',  0
+    msg1    db 'GaoWuJie2004', 0x0d,0x0a
+            db '@QinBeiLei',   0x0d,0x0a
+            db '@2019-10-13',  0
+
+    msg2:   db 0x0d,0x0a, 0x0d,0x0a, 0x0d,0x0a,
+            db '2023-12-12 19:19:00'
 
 
 
