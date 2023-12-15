@@ -25,7 +25,7 @@ SECTION MBR_CODE vstart=0x7c00
     mov dword [bx+0x18], 0x0000_FFFF
     mov dword [bx+0x1c], 0x00CF_9200
 
-    mov word [cs:pgdt], 39                      ;界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
+    mov word [cs:pgdt], 4*8-1                      ;界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
     ;3.将GDT首地址和界限载入GDTR
     lgdt [cs:pgdt]
 
@@ -50,6 +50,7 @@ SECTION MBR_CODE vstart=0x7c00
     mov ax, all_data_seg_sel
     mov ds, ax
 
+    xchg bx, bx 
     ;7.刷新CS段描述符高速缓存器，让默认操作尺寸为32位，
     jmp code_seg_sel:.flush              ;CR0 PE位控制寻找方式，当前PE=1，描述符寻址
                                                 ;段的位置，现在是选择子了
