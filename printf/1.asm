@@ -69,7 +69,9 @@ SECTION MBR_CODE
     pgdt    dw 00                               ;GDT界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
             dd 0x0000_7e00                      ;全局描述符表，安装起始位置   
     
-    test_string db 'GaoWuJie2004', 0
+    test_string db 'GaoWuJie2004', 0x0d,0x0a
+                db '@QinBeiLei',   0x0d,0x0a
+                db '@2019-10-13',  0
 
 
 
