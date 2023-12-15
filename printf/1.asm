@@ -1,8 +1,8 @@
 ; 目标：put_string函数
 
-code_seg_sel        equ     0x10               ;0b00000000_00010_000，代码段选择子
-stack_seg_sel       equ     0x18               ;0b00000000_00011_000，栈段选择子
-all_data_seg_sel    equ     0x20               ;0b00000000_00100_000，4GB数据段选择子
+code_seg_sel        equ     0x08               ;0b00000000_00001_000，代码段选择子
+stack_seg_sel       equ     0x10               ;0b00000000_00010_000，栈段选择子
+all_data_seg_sel    equ     0x18               ;0b00000000_00011_000，4GB数据段选择子
 
 
 SECTION MBR_CODE vstart=0x7c00
@@ -15,18 +15,15 @@ SECTION MBR_CODE vstart=0x7c00
     ;#0空描述符，CPU的规定
     mov dword [bx+0x00], 0x0000_0000
     mov dword [bx+0x04], 0x0000_0000 
-    ;#1 文本模式显存字符缓冲区，0xb_8000
-    mov dword [bx+0x08], 0x8000_FFFF
-    mov dword [bx+0x0c], 0x0040_920b
-    ;#2 保护模式下的代码段描述符
-    mov dword [bx+0x10], 0x7c00_01ff
-    mov dword [bx+0x14], 0x0040_9800
-    ;#3 栈段
-    mov dword [bx+0x18], 0x7000_0c00
-    mov dword [bx+0x1c], 0x0040_9200
-    ;#4 0-4GB全局数据描述符
-    mov dword [bx+0x20], 0x0000_FFFF
-    mov dword [bx+0x24], 0x00CF_9200
+    ;#1 保护模式下的代码段描述符
+    mov dword [bx+0x08], 0x7c00_01ff
+    mov dword [bx+0x0c], 0x0040_9800
+    ;#2 栈段
+    mov dword [bx+0x10], 0x7000_0c00
+    mov dword [bx+0x14], 0x0040_9200
+    ;#3 0-4GB全局数据描述符
+    mov dword [bx+0x18], 0x0000_FFFF
+    mov dword [bx+0x1c], 0x00CF_9200
 
     mov word [cs:pgdt], 39                      ;界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
     ;3.将GDT首地址和界限载入GDTR
