@@ -198,7 +198,7 @@ put_char:                                       ;输入：cl=ASCII码
 
 put_string:                                     ;输入：ds:ebx字符串首地址，0x00结束
                                                 ;输出：无
-    push eax
+    push ecx
     push ebx
 
  .each_char:                                 
