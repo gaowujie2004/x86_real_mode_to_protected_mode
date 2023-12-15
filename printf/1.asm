@@ -28,9 +28,7 @@ SECTION MBR_CODE vstart=0x7c00
     mov dword [bx+0x20], 0x0000_FFFF
     mov dword [bx+0x24], 0x00CF_9200
 
-
-
-    mov word [cs:pgdt], 31                      ;界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
+    mov word [cs:pgdt], 39                      ;界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
     ;3.将GDT首地址和界限载入GDTR
     lgdt [cs:pgdt]
 
