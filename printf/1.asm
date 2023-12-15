@@ -1,12 +1,12 @@
 ; 目标：put_string函数
+;TODO-Tips      需要重点提示
+;TODO-BUG       当初的bug
+;TODO-Optimize  优化点
 
 code_seg_sel        equ     0x08               ;0b00000000_00001_000，代码段选择子
 stack_seg_sel       equ     0x10               ;0b00000000_00010_000，栈段选择子
 all_data_seg_sel    equ     0x18               ;0b00000000_00011_000，4GB数据段选择子
 
-;TODO-Tips
-;TODO-BUG
-;TODO-Optimize
 
 SECTION MBR_CODE
     mov ax, cs
@@ -63,7 +63,7 @@ SECTION MBR_CODE
     mov ax, all_data_seg_sel
     mov ds, ax
 
-    mov ebx, msg1 + 0x7c00                      ;TODO：ds是0-4GB选择子，基地址是0。偏移量可要注意了
+    mov ebx, msg1 + 0x7c00                      ;TODO-tips：ds是0-4GB选择子，基地址是0。偏移量可要注意了
     call put_string
 
     mov ebx, msg2 + 0x7c00
