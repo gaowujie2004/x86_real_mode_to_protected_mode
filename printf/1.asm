@@ -202,8 +202,8 @@ put_string:                                     ;输入：ds:ebx字符串首地�
     push ebx
 
  .each_char:                                 
-    mov al, [ebx]
-    or al, al                                   ;为了性能，or 操作数全是寄存器，并且不会改变or的值，影响ZF标志位（其他标志位的影响不确定）TODO-Optimize：操作数全是寄存器，没有立即数，也没有内存寻址，所以很快，而且指令所占字节数少
+    mov cl, [ebx]
+    or cl, cl                                   ;为了性能，or 操作数全是寄存器，并且不会改变or的值，影响ZF标志位（其他标志位的影响不确定）TODO-Optimize：操作数全是寄存器，没有立即数，也没有内存寻址，所以很快，而且指令所占字节数少
     jz .put_string_return                       ;等于零则跳转（ZF=1)
     call put_char                               ;输入：cl=ASCII码
     inc ebx
