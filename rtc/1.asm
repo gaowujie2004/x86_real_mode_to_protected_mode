@@ -69,7 +69,7 @@ rtc_interrupt_0x70:                             ;更新周期结束中断，读�
 
 
  .interrupt_check:
-    ;RTC read C寄存器中断类型
+                                                ;TODO-Tips：RTC C寄存器中断类型，需要读取一下，若不读取下次该中断不会再次触发
     mov al, 0x0c
     out rtc_index_port, al                        
     in al, rtc_data_port                        ;读取RTC C寄存器内容，读取后该寄存器自动清零
