@@ -82,7 +82,7 @@ rtc_interrupt_0x70:                             ;更新周期结束中断，读�
  
  .save_time_data:
     ;保存CMOS-RAM中的日期数据，最后压入年，LIFO
-    mov al, 0x00
+    xor al, al
     out rtc_index_port, al
     in al, rtc_data_port                        ;秒
     push ax                                     ;不用慌，弹栈时只要ax的低8位——al即可
