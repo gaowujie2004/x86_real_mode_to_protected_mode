@@ -25,15 +25,7 @@ SECTION MBR_CODE vstart=0
     mov [0x70*4+2], cs
     
 
-    ;2.RTC初始化，RTC C寄存器（中断发生，中断类型）读取即清零，这样中断才会持续产生。
-    mov dx, rtc_index_port
-    mov al, 0x0c                                ;高1位——NMI为0，即打开NMI引脚信号
-    out dx, al
-    mov dx, rtc_data_port
-    in al, dx
-
-    ;3.设置RTC中断，目前只开放【更新周期结束中断】
-    ;RTC B寄存器端口，控制中断类型
+    ;2.RTC B寄存器端口，控制中断类型，目前只开放【更新周期结束中断】
     mov dx, rtc_index_port
     mov al, 0x0b
     out dx, al
@@ -41,7 +33,14 @@ SECTION MBR_CODE vstart=0
     mov al, 0b0001_0010                         
     out dx, al                                  ;RTC B寄存器-中断允许开关，目前只允许【更新结束中断】
 
+    ;3.RTC C寄存器（中断发生，中断类型）读取即清零，这样中断才会持续产生。
+    mov dx, rtc_index_port
+    mov al, 0x0c                                ;高1位——NMI为0，即打开NMI引脚信号
+    out dx, al
+    mov dx, rtc_data_port
+    in al, dx
 
+    
     ;4.设置8259A中断屏蔽寄存器
     ;0是开放，1是关闭该中断引脚
     in al, 0xa1
@@ -53,8 +52,8 @@ SECTION MBR_CODE vstart=0
 
     mov ax, 0xb800
     mov es, ax
- .loop_idel:
     mov byte [es:13*160 + 60], '@'
+ .loop_idel:
     not byte [es:13*160 + 61]
     hlt
     jmp .loop_idel
