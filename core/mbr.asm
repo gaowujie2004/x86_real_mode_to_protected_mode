@@ -1,11 +1,14 @@
+      
 
 
-code_seg_sel        equ     0x08               ;0b00000000_00001_000，代码段选择子
-stack_seg_sel       equ     0x10               ;0b00000000_00010_000，栈段选择子
-all_data_seg_sel    equ     0x18               ;0b00000000_00011_000，4GB数据段选择子
+      all_data_seg_sel    equ     0B00000000_00001_000      ;0x08，4GB数据段选择子
+      mbr_code_seg_sel    equ     0B00000000_00010_000      ;0x10，初始化代码段（mbr）
+      core_stack_seg_sel  equ     0B00000000_00011_000      ;0x18，初始化栈段（mbr、core）
+      video_buf_seg_sel   equ     0B00000000_00100_000      ;0x20，初始化栈段（mbr、core）
 
-disk_hard_start_lba equ     50
-disk_hard_buffer    equ     0x7e00
+
+      disk_hard_start_lba equ     50
+      disk_hard_buffer    equ     0x7e00
 
 SECTION MBR
       mov ax, cs
@@ -17,17 +20,22 @@ SECTION MBR
       ;#0空描述符
       mov dword [bx+0x00], 0x0000_0000
       mov dword [bx+0x04], 0x0000_0000 
-      ;#1 内核代码段
-      mov dword [bx+0x08], 0x7c00_01ff            
-      mov dword [bx+0x0c], 0x0040_9800
-      ;#2 内核栈段                                    
-      mov dword [bx+0x10], 0x6c00_0FFF             
-      mov dword [bx+0x14], 0x0040_9200
-      ;#3 0-4GB全局数据段
-      mov dword [bx+0x18], 0x0000_FFFF
-      mov dword [bx+0x1c], 0x00CF_9200
+      ;#1 4GB数据段
+      mov dword [bx+0x08], 0x0000_FFFF
+      mov dword [bx+0x0c], 0x00CF_9200
+      ;#2 初始代码段（mbr）
+      mov dword [bx+0x10], 0x7c00_01ff            
+      mov dword [bx+0x14], 0x0040_9800
+      ;#3 初始栈段（mbr与内核）                                    
+      mov dword [bx+0x18], 0x6c00_0FFF             
+      mov dword [bx+0x1c], 0x0040_9200
+      ;#4 文本模式缓冲区                                  
+      mov dword [bx+0x20], 0x8000_7FFF           
+      mov dword [bx+0x24], 0x0B40_920B
 
-      mov word [cs:pgdt+0x7c00], 4*8-1            
+  .gdt_limt:
+      mov word [cs:pgdt+0x7c00], 5*8-1
+
   .lgdt:
       lgdt [cs:pgdt+0x7c00]
 
@@ -44,14 +52,14 @@ SECTION MBR
       or  eax, 1
       mov cr0, eax
 
-      jmp code_seg_sel:.flush                   ;CR0 PE位控制寻找方式，当前PE=1，描述符寻址
+      jmp mbr_code_seg_sel:.flush               ;CR0 PE位控制寻找方式，当前PE=1，描述符寻址
                                                 ;段的位置，现在是选择子了
 
-      ;8.保护模式，寻址模式将发生改变，不再是段地址*16+有效地址得到物理地址；段寄存器的内容现在是选择子，用来在GDT中选择一个描述符放入段描述符高速缓冲区
+
       [bits 32]  
   .flush: 
       ;刷新其他段的选择器
-      mov ax, stack_seg_sel
+      mov ax, core_stack_seg_sel
       mov ss, ax
       mov esp,0x1000                            ;TODO-Tips:栈段长度是0x1000
       mov ax, all_data_seg_sel
