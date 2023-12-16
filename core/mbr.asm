@@ -24,17 +24,17 @@ SECTION MBR
       mov dword [bx+0x08], 0x0000_FFFF
       mov dword [bx+0x0c], 0x00CF_9200
       ;#2 初始代码段（mbr）
-      mov dword [bx+0x10], 0x7c00_01ff            
+      mov dword [bx+0x10], 0x7c00_01FF          ;范围：0x7c00 - 0x7dff；Base=0x7c00；
       mov dword [bx+0x14], 0x0040_9800
       ;#3 初始栈段（mbr与内核）                                    
-      mov dword [bx+0x18], 0x6c00_0FFF             
+      mov dword [bx+0x18], 0x6c00_0FFF          ;范围：0x6c00 - 0x7bff；Base=0x6c00          
       mov dword [bx+0x1c], 0x0040_9200
       ;#4 文本模式缓冲区                                  
-      mov dword [bx+0x20], 0x8000_7FFF           
-      mov dword [bx+0x24], 0x0B40_920B
+      mov dword [bx+0x20], 0x8000_7FFF          ;范围：0xb_8000 - 0xb_ffff；Base=0xb_8000
+      mov dword [bx+0x24], 0x0040_920B
 
   .gdt_limt:
-      mov word [cs:pgdt+0x7c00], 5*8-1
+      mov word [cs:pgdt+0x7c00], 5*8-1          ;mbr代码段不可读，但此时还未进入保护模式，而且默认的cs段描述符高速缓存器也是没有限制的
 
   .lgdt:
       lgdt [cs:pgdt+0x7c00]
