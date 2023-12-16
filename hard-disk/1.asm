@@ -132,7 +132,7 @@ read_disk_hard_0:                               ;从硬盘读取一个逻辑扇�
 
     ;循环等待硬盘
     mov dx, disk_hard_command_state_port
- .loop_wait:
+ .loop_wait:                                    ;TODO-Optimize：只能这样等待吗？CPU和硬盘的速度差异非常非常大，等待的过程CPU都能执行非常非常多条指令了。
     in al, dx
     test al, 0B0000_0001                        ;低1位如果是1，则说明有错误
     jnz .error                                  ;不等于0，跳转；低1位是1，有错误
@@ -145,14 +145,14 @@ read_disk_hard_0:                               ;从硬盘读取一个逻辑扇�
     ;ds:ebx=数据缓冲区起始地址
     mov ecx, 256
     mov dx, disk_hard_data_port
- .loop_read:
+ .loop_read:                                    ;TODO-Optimize：一次才传输2byte数据；硬盘控制器能不能也有一个Buffer，等它的Buffer满了，我再一次性读取？但CPU数据通路才4byte（32位CPU）还是得读取好多次。DMA 吗？？
     in ax, dx
     mov [ebx], ax
     add ebx, 2
     loop .loop_read
     jmp .return
 
- .error:                                        ;TODO：遗留项，加载内核时，支持错误的打印。
+ .error:                                        ;TODO-Todo：代办项，加载内核时，对错误打印。
  
  .return:
     pop ebx
