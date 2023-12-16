@@ -7,8 +7,8 @@
       video_buf_seg_sel   equ     0B00000000_00100_000      ;0x20，初始化栈段（mbr、core）
 
 
-      disk_hard_start_lba equ     50
-      disk_hard_buffer    equ     0x7e00
+      core_base_address equ 0x00040000                      ;内核程序的起始物理内存地址
+      core_start_sector equ 0x00000001                      ;内核的起始逻辑扇区号 
 
 SECTION MBR
       mov ax, cs
@@ -57,25 +57,19 @@ SECTION MBR
 
 
       [bits 32]  
-  .flush: 
-      ;刷新其他段的选择器
+  .flush:                                       ;刷新所有段寄存器，CS中D=1，32位保护模式
       mov ax, core_stack_seg_sel
       mov ss, ax
-      mov esp,0x1000                            ;TODO-Tips:栈段长度是0x1000
+      mov esp,0x1000                            ;TODO-Tips：栈段长度是0x1000
       mov ax, all_data_seg_sel
       mov ds, ax
 
-      xchg bx, bx                               ;TODO-Tips: Bochs的魔术断点，这条指令不会对bx做任何修改
       mov eax, disk_hard_start_lba
       mov ebx, disk_hard_buffer
-      call read_disk_hard_0
-
-
-      jmp $
-      hlt                                       
+      call read_disk_hard_0   
       
       
-      pgdt    dw 00                             ;GDT界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
+      pgdt  dw 00                               ;GDT界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
             dd 0x0000_7e00                      ;全局描述符表，安装起始位置   
       
 
@@ -84,6 +78,8 @@ SECTION MBR
 read_disk_hard_0:                               ;从硬盘读取一个逻辑扇区，0表示主硬盘
                                                 ;输入： eax=起始逻辑扇区号（28bit）
                                                 ;      ds:ebx=数据缓冲区起始地址
+                                                ;输出： 无
+
       disk_hard_data_port           equ 0x1f0   ;硬盘数据端口（16-bit）
 
       disk_hard_errcode_port        equ 0x1f1   ;硬盘错误码端口
@@ -133,7 +129,7 @@ read_disk_hard_0:                               ;从硬盘读取一个逻辑扇�
 
       ;循环等待硬盘
       mov dx, disk_hard_command_state_port
-.loop_wait:                                     ;TODO-Optimize：只能这样等待吗？CPU和硬盘的速度差异非常非常大，等待的过程CPU都能执行非常非常多条指令了。
+  .loop_wait:                                   ;TODO-Optimize：只能这样等待吗？CPU和硬盘的速度差异非常非常大，等待的过程CPU都能执行非常非常多条指令了。
       in al, dx
       test al, 0B0000_0001                      ;低1位如果是1，则说明有错误
       jnz .error                                ;不等于0，跳转；低1位是1，有错误
@@ -146,16 +142,16 @@ read_disk_hard_0:                               ;从硬盘读取一个逻辑扇�
       ;ds:ebx=数据缓冲区起始地址
       mov ecx, 256
       mov dx, disk_hard_data_port
-.loop_read:                                     ;TODO-Optimize：一次才传输2byte数据；硬盘控制器能不能也有一个Buffer，等它的Buffer满了，我再一次性读取？但CPU数据通路才4byte（32位CPU）还是得读取好多次。DMA 吗？？
+  .loop_read:                                   ;TODO-Optimize：一次才传输2byte数据；硬盘控制器能不能也有一个Buffer，等它的Buffer满了，我再一次性读取？但CPU数据通路才4byte（32位CPU）还是得读取好多次。DMA 吗？？
       in ax, dx
       mov [ebx], ax
       add ebx, 2
       loop .loop_read
       jmp .return
 
-.error:                                         ;TODO-Todo：代办项，加载内核时，对错误打印。
+  .error:                                       ;TODO-Todo：代办项，加载内核时，对错误打印。
 
-.return:
+  .return:
       pop ebx
       pop ecx
       pop edx 
