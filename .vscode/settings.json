@@ -1,3 +1,5 @@
 {
-    "editor.tabSize": 4
+    "editor.tabSize": 6,
+    "codeium.aggressiveShutdown": false,
+    "codeium.enableSearch": true
 }
