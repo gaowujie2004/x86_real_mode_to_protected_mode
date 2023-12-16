@@ -49,7 +49,10 @@ SECTION MBR_CODE vstart=0
     mov es, ax
     mov byte [es:13*160 + 60], '@'
  .loop_idel:
-    not byte [es:13*160 + 61]
+    mov cl, [es:13*160 + 61]
+    not cl
+    and cl, 0b0111_0111                         ;颜色位：闪烁位、高亮位统统清零（太干扰了），其他位保持原值
+    mov [es:13*160 + 61], cl
     hlt
     jmp .loop_idel
 
@@ -149,7 +152,10 @@ rtc_interrupt_0x70:                             ;更新周期结束中断，读�
     mov byte [es:bx+20], al  
 
     mov byte [es:bx+22], ':' 
-    not byte [es:bx+23]
+    mov al, byte [es:bx+23]
+    not al
+    and al, 0b0111_0111
+    mov byte [es:bx+23], al
 
     ;分
     pop ax
@@ -158,7 +164,10 @@ rtc_interrupt_0x70:                             ;更新周期结束中断，读�
     mov byte [es:bx+26], al  
 
     mov byte [es:bx+28], ':' 
-    not byte [es:bx+29]
+    mov al, [es:bx+29]
+    not al
+    and al, 0b0111_0111
+    mov byte [es:bx+29], al
 
 
     ;秒
