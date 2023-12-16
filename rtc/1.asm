@@ -26,20 +26,15 @@ SECTION MBR_CODE vstart=0
     
 
     ;2.RTC B寄存器端口，控制中断类型，目前只开放【更新周期结束中断】
-    mov dx, rtc_index_port
     mov al, 0x0b
-    out dx, al
-    mov dx, rtc_data_port
+    out rtc_index_port, al
     mov al, 0b0001_0010                         
-    out dx, al                                  ;RTC B寄存器-中断允许开关，目前只允许【更新结束中断】
+    out rtc_data_port, al                                  ;RTC B寄存器-中断允许开关，目前只允许【更新结束中断】
 
     ;3.RTC C寄存器（中断发生，中断类型）读取即清零，这样中断才会持续产生。
-    mov dx, rtc_index_port
     mov al, 0x0c                                ;高1位——NMI为0，即打开NMI引脚信号
-    out dx, al
-    mov dx, rtc_data_port
-    in al, dx
-
+    out rtc_index_port, al
+    in al, rtc_data_port
     
     ;4.设置8259A中断屏蔽寄存器
     ;0是开放，1是关闭该中断引脚
@@ -64,26 +59,20 @@ rtc_interrupt_0x70:                             ;更新周期结束中断，读�
     push ax
     push es
 
-
-
  .safe_read_cmos_ram:
     ;能否安全地读CMOS-RAM数据，在当前【更新周期结束中断】内是多余的判断
-    mov dx, rtc_index_port
     mov al, 0x0a
-    out dx, al
-    mov dx, rtc_data_port
-    in al, dx
+    out rtc_index_port, al
+    in al, rtc_data_port
     test al, 0B1000_0000                        ;最高位为0，即可安全地访问CMOS-RAM
     jnz  .safe_read_cmos_ram                    ;不等于0跳转
 
 
  .interrupt_check:
     ;RTC read C寄存器中断类型
-    mov dx, rtc_index_port
     mov al, 0x0c
-    out dx, al
-    mov dx, rtc_data_port                       ;读取RTC C寄存器内容，读取后该寄存器自动清零
-    in al, dx      
+    out rtc_index_port, al                        
+    in al, rtc_data_port                        ;读取RTC C寄存器内容，读取后该寄存器自动清零
 
     mov ah, al
     and ah, 0b1001_0000
@@ -93,46 +82,35 @@ rtc_interrupt_0x70:                             ;更新周期结束中断，读�
  
  .save_time_data:
     ;保存CMOS-RAM中的日期数据，最后压入年，LIFO
-    mov dx, rtc_index_port
     mov al, 0x00
-    out dx, al
-    mov dx, rtc_data_port
-    in al, dx                                   ;秒
+    out rtc_index_port, al
+    in al, rtc_data_port                        ;秒
     push ax                                     ;不用慌，弹栈时只要ax的低8位——al即可
 
-    mov dx, rtc_index_port
     mov al, 0x02
-    out dx, al
-    mov dx, rtc_data_port
-    in al, dx                                   ;分
+    out rtc_index_port, al
+    in al, rtc_data_port                        ;分
     push ax                                     
 
-    mov dx, rtc_index_port
     mov al, 0x04
-    out dx, al
-    mov dx, rtc_data_port
-    in al, dx                                   ;时
+    out rtc_index_port, al
+    in al, rtc_data_port                        ;时
     push ax                                  
 
-    mov dx, rtc_index_port
+
     mov al, 0x07
-    out dx, al
-    mov dx, rtc_data_port
-    in al, dx                                   ;日
+    out rtc_index_port, al
+    in al, rtc_data_port                        ;日
     push ax 
 
-    mov dx, rtc_index_port
     mov al, 0x08
-    out dx, al
-    mov dx, rtc_data_port
-    in al, dx                                   ;月
+    out rtc_index_port, al
+    in al, rtc_data_port                        ;月
     push ax 
 
-    mov dx, rtc_index_port
     mov al, 0x09
-    out dx, al
-    mov dx, rtc_data_port
-    in al, dx                                   ;年
+    out rtc_index_port, al
+    in al, rtc_data_portdx                      ;年
     push ax 
 
  .show_time:
