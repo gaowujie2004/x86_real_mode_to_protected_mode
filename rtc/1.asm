@@ -110,7 +110,7 @@ rtc_interrupt_0x70:                             ;更新周期结束中断，读�
 
     mov al, 0x09
     out rtc_index_port, al
-    in al, rtc_data_portdx                      ;年
+    in al, rtc_data_port                      ;年
     push ax 
 
  .show_time:
