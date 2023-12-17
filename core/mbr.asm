@@ -34,7 +34,7 @@ SECTION MBR
       mov dword [bx+0x24], 0x0040_920B
 
   .gdt_limt:
-      mov word [cs:pgdt+0x7c00], 5*8-1          ;mbr代码段不可读，但此时还未进入保护模式，而且默认的cs段描述符高速缓存器也是没有限制的
+      mov word [cs:pgdt+0x7c00], 5*8-1          ;mbr代码段不可读，但此时还未进入保护模式，CS段描述符高速缓存器中基地址=0（预置的）
 
   .lgdt:
       lgdt [cs:pgdt+0x7c00]
@@ -64,14 +64,122 @@ SECTION MBR
       mov ax, all_data_seg_sel
       mov ds, ax
 
-      mov eax, disk_hard_start_lba
-      mov ebx, disk_hard_buffer
-      call read_disk_hard_0   
+ .load_core:
+      ;ds=4gb
+      mov eax, core_start_sector
+      mov ebx, core_base_address
+      call read_disk_hard_0
+
+      mov edx, 0
+      mov eax, [core_base_address]
+      mov ebx, 512                              
+      div ebx                                   ;edx:eax / ecx = eax......edx
+
+      or edx, edx
+      jnz @1                                    ;不等于0，说明还有数据，商得+1，但已经读取过一次，扯平了
+      dec eax
+   @1:
+      or eax, eax                               ;等于0说明，内核刚好512或少于512字节
+      jz .setup_core_desc
+      mov ecx, eax
+      mov eax, core_start_sector
+      mov ebx, core_base_address
+   .core_read_more:
+      inc eax
+      add ebx, 512
+      call read_disk_hard_0
+      loop .core_read_more
       
+ .setup_core_desc:                             ;安装内核段描述符,不先安装描述符，内存就无法访问                
+ ;ds=4GB、edi=内核起始物理地址、esi=GDT起始物理地址
+      mov edi, core_base_address
+      mov esi, [0x7c00+pgdt+0x02]               ;GDT起始物理地址，不能使用cs，目前是只能执行，不能读
+
+      ;1 内核公共代码段全局描述符
+      mov eax, [edi+0x04]                       ;公共代码段起始汇编地址
+      mov ebx, [edi+0x08]                       ;内核数据段起始汇编地址
+      sub ebx, eax
+      dec ebx                                   ;公共代码段界限
+      add eax, edi                              ;公共代码段基地址，段起始汇编地址+内核起始物理地址=重定位后的物理地址
+      mov ecx, 0x0040_9800                      ;公共代码段属性
+                                                ; G DB L AVL=0100、段界限=0000 | P DPL S=1001、TYPE=1000（只执行）
+      call make_gdt_descriptor                           
+      mov [esi+0x28], eax
+      mov [esi+0x2c], edx
+
+      ;2 内核数据段全局描述符
+      mov eax, [edi+0x08]                       ;内核数据段起始汇编地址
+      mov ebx, [edi+0x0c]                       ;内核代码段起始汇编地址
+      sub ebx, eax
+      dec ebx                                   ;内核数据段界限
+      add eax, edi                              ;内核数据段基地址，段起始汇编地址+内核起始物理地址=重定位后的物理地址
+      mov ecx, 0x0040_9200                      ;内核数据段属性
+                                                ; G DB L AVL=0100、段界限=0000 | P DPL S=1001、TYPE=0010（可读可写）
+      call make_gdt_descriptor
+      mov [esi+0x30], eax
+      mov [esi+0x34], edx
+
+      ;3 内核代码段全局描述符
+      mov eax, [edi+0x0c]                       ;内核代码段起始汇编地址
+      mov ebx, [edi+0x00]                       ;内核总字节数
+      sub ebx, eax
+      dec ebx                                   ;内核代码段界限
+      add eax, edi                              ;内核代码段基地址，段起始汇编地址+内核起始物理地址=重定位后的物理地址
+      mov ecx, 0x0040_9800                      ;内核代码段属性
+                                                ; G DB L AVL=0100、段界限=0000 | P DPL S=1001、TYPE=1000（只执行）
+      call make_gdt_descriptor
+      mov [esi+0x38], eax
+      mov [esi+0x3c], edx
+ 
+ .flush_gdt:
+      mov word [pgdt+0x7c00], 8*8-1
+      lgdt [pgdt+0x7c00]
+ 
+ .enter_core:
+      jmp far [edi+0x10]                        ;间接远转移，因为是在32位保护模式，
+                                                ;所以是代码段选择子:段内偏移量，而内核代码start标号处就是段内偏移量
       
-      pgdt  dw 00                               ;GDT界限值=表总字节数-1，也等于最后一字节偏移量（一共两个描述符，一个描述符占8字节）
-            dd 0x0000_7e00                      ;全局描述符表，安装起始位置   
+ pgdt dw 00                       
+      dd 0x0000_7e00                            ;全局描述符表，安装起始物理内存位置   
       
+
+;------------------------------------------------------------------------
+make_gdt_descriptor:                            ;生成一个64位全局描述符表的描述符
+                                                ;输入：EAX=线性基地址
+                                                ;      EBX=段界限
+                                                ;      ECX=属性（各属性位都在原始
+                                                ;      位置，其它没用到的位置0） 
+                                                ;返回：EDX(H32):EAX(L32)=完整的描述符
+      push ebx
+      push ecx
+      
+      mov edx, eax                              ;暂存eax(线性基地址)的高16位
+      
+   .limit_attr_reset:
+   ;把段界限(ebx)、段属性(ecx)不用的位清零                           
+      and ebx, 0x000_fffff                      
+      and ecx, 0x00f0_ff00                     
+
+   .make_l32_eax:
+      shl eax, 16 
+      or  ax, bx
+
+   .make_h32_edx:
+      and edx, 0xffff_0000                      ;描述符高32位段基地址部分
+      rol edx, 8
+      bswap edx
+
+      xor bx, bx                                
+      or  edx, ebx                              ;描述符高32位段界限部分
+
+      or edx, ecx                               ;描述符高32位段属性部分
+
+
+      pop ecx
+      pop ebx
+      ret
+;------------------------------------------------------------------------
+
 
 
 ;------------------------------------------------------------------------
