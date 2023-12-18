@@ -323,15 +323,82 @@ SECTION sys_routine vstart=0
       popad
       retf
 
+ allocate_memory:                               ;为用户程序动态分配内存
+                                                ;输入：ECX=希望分配的字节数
+                                                ;输出：ECX=分配的内存的起始线性地址
+      push ds
+      push eax
+      push ebx
+
+      mov ax, core_data_seg_sel
+      mov ds, ax
+
+      mov eax, [ram_alloc]                      ;[ram_alloc]=起始线性地址
+      mov ebx, eax                              ;ebx暂存分配的地址，最为最终结果
+      add eax, ecx                              ;eax下一次分配的起始线性地址
+      
+      mov ecx, ebx
+
+   .up_align:
+   ;强制ebx，4字节向上对齐
+      mov ebx, eax
+      and ebx, 0xffff_fffc                      ;低两位清零，向下4字节对齐
+      add ebx, 4                                ;再加上4，使ebx向上4字节对齐。比如数值5，最终向上4字节对齐就是8
+
+      test eax, 0B11                            ;若eax本身就4字节对齐，ebx的结果就大了4。
+      cmovnz eax, ebx                           ;第两位不等于0，说明eax不是4字节对齐；若等于0则不改变eax的值
+   
+   .write:
+      mov [ram_alloc], eax
+
+   .return:
+      pop ebx
+      pop eax
+      pop dx
+      retf
+
 
 SECTION core_data   vstart=0
-      test1       db 0x20,0x20,0x20,0x20, 'Core Loading Success.', 0
+      ram_alloc   dd 0x0010_0000                   ;用户程序动态内存分配起始线性地址（未开启分页就是物理地址）
 
+      core_buf    times 2048 db 0   
 
-      cpu_brand0  db 0x0d,0x0a,0x0d,0x0a, 'Down is CPU Brand Info:', 0x0d,0x0a,0x0d,0x0a, 0
+      test1       db 'Core Loading Success.', 0
+
+      cpu_brand0  db 0x0d,0x0a, 'Down is CPU Brand Info:', 0x0d,0x0a,0x0d,0x0a, 0
       cpu_brand     times 49 db 0,              ;存放cpuinfo需48byte，额外的结束0，共49byte
 
 SECTION core_code   vstart=0
+ load_relocate_user_program:                    ;加载重定位用户程序
+                                                ;输入：ESI=起始逻辑扇区号
+                                                ;返回：AX=指向用户程序头部的段选择子
+      pushad
+      push ds
+      push es
+
+   .read_user_program:
+      ;ds=core_data
+      mov ax, core_data_seg_sel
+      mov ds, ax
+
+      mov eax, esi
+      mov ebx, core_buf      
+      call sys_routine_seg_sel:read_disk_hard_0
+
+      mov eax, [core_buf]                       ;core_buf 0-3是用户程序长度字段(字节单位)
+      mov ebx, eax                              
+      and ebx, 0xffff_fe00                      ;低9位清零
+      add ebx, 512                              ;向上512对齐
+
+      test eax,0x0000_01ff                      ;eax原先是不是512字节对齐？只test低9位
+      cmovnz eax, ebx                           ;低9位不是0说明不是512对齐，使用对齐结果
+
+
+
+      pop es
+      pop ds
+      popad
+      ret
  start:
       call sys_routine_seg_sel:clear
 
