@@ -358,7 +358,7 @@ SECTION sys_routine vstart=0
    .return:
       pop ebx
       pop eax
-      pop dx
+      pop ds
       retf
 ;=================================== END =====================================
 
@@ -385,7 +385,7 @@ SECTION core_code   vstart=0
       push ds
       push es
 
-   .read_user_program:
+   .get_user_program_size:
       ;ds=core_data
       mov ax, core_data_seg_sel
       mov ds, ax
@@ -402,6 +402,28 @@ SECTION core_code   vstart=0
       test eax,0x0000_01ff                      ;eax原先是不是512字节对齐？只test低9位
       cmovnz eax, ebx                           ;低9位不是0说明不是512对齐，使用对齐结果
 
+   .allocate_memory:
+      ;为用户程序动态分配内存
+      mov ecx, eax                              ;实际需要申请的内存数量(字节单位)
+      ;输入ecx=预期分配的字节数、输出：ecx=分配的内存起始线性地址
+      call sys_routine_seg_sel:allocate_memory
+      mov ebx, ecx                              ;暂存分配的线性地址
+
+   .load_user_program:
+      ;eax 用户程序所占字节数(512对齐)
+      push eax
+      shr eax, 9                                ;eax/512，2^9=512
+      mov ecx, eax                              ;用户程序所占扇区数
+      ;ds=4GB
+      mov ax, all_data_seg_sel
+      mov ds, ax
+      mov eax, esi                              
+      .read_more:
+            ;ebx用户程序分配的内存起始线性地址，所以ds必须得是0-4GB（0为段基址）
+            call sys_routine_seg_sel:read_disk_hard_0
+            inc eax
+            add ebx, 512
+            loop .read_more
 
 
       pop es
