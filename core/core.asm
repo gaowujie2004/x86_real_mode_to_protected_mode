@@ -15,6 +15,7 @@
       core_data_seg_sel   equ     0B00000000_00110_000      ;0x30，内核数据段选择子 
       core_code_seg_sel   equ     0B00000000_00111_000      ;0x38，内核代码段选择子 
 
+;=============================== header seg ==========================================
 SECTION header  vstart=0
       ;以下是系统核心的头部，用于加载核心程序 
       core_length       dd file_end             ;内核程序总长度#00
@@ -31,7 +32,10 @@ SECTION header  vstart=0
 
       core_entry        dd start                ;内核代码段入口点#10
                         dw core_code_seg_sel
+;=============================== header seg END=========================================
 
+
+;============================== sys_routine seg ========================================
       [bits 32]
 SECTION sys_routine vstart=0
  put_char:                                      ;打印一个字符
@@ -356,8 +360,11 @@ SECTION sys_routine vstart=0
       pop eax
       pop dx
       retf
+;============================== sys_routine seg END ====================================
 
 
+
+;============================== core_data seg ==========================================
 SECTION core_data   vstart=0
       ram_alloc   dd 0x0010_0000                   ;用户程序动态内存分配起始线性地址（未开启分页就是物理地址）
 
@@ -367,7 +374,10 @@ SECTION core_data   vstart=0
 
       cpu_brand0  db 0x0d,0x0a, 'Down is CPU Brand Info:', 0x0d,0x0a,0x0d,0x0a, 0
       cpu_brand     times 49 db 0,              ;存放cpuinfo需48byte，额外的结束0，共49byte
+;============================== core_data seg END =======================================
 
+
+;============================== core_code seg ===========================================
 SECTION core_code   vstart=0
  load_relocate_user_program:                    ;加载重定位用户程序
                                                 ;输入：ESI=起始逻辑扇区号
@@ -436,6 +446,7 @@ SECTION core_code   vstart=0
       mov ebx, cpu_brand
       call sys_routine_seg_sel:put_string
 
+;============================== core_code seg END =======================================
 
 
 
