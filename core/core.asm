@@ -386,7 +386,7 @@ SECTION core_code   vstart=0
       push es
 
    .get_user_program_size:
-      ;ds=core_data
+   ;ds=core_data
       mov ax, core_data_seg_sel
       mov ds, ax
 
@@ -403,14 +403,14 @@ SECTION core_code   vstart=0
       cmovnz eax, ebx                           ;低9位不是0说明不是512对齐，使用对齐结果
 
    .allocate_memory:
-      ;为用户程序动态分配内存
+   ;为用户程序动态分配内存
       mov ecx, eax                              ;实际需要申请的内存数量(字节单位)
       ;输入ecx=预期分配的字节数、输出：ecx=分配的内存起始线性地址
       call sys_routine_seg_sel:allocate_memory
       mov ebx, ecx                              ;暂存分配的线性地址
 
    .load_user_program:
-      ;eax 用户程序所占字节数(512对齐)
+   ;eax 用户程序所占字节数(512对齐)
       push eax
       shr eax, 9                                ;eax/512，2^9=512
       mov ecx, eax                              ;用户程序所占扇区数
