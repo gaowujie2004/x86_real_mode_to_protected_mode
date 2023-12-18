@@ -1,4 +1,11 @@
-
+      video_card_index_port   equ     0x3d4                 ;显卡的功能索引寄存器端口
+      video_card_data_port    equ     0x3d5                 ;显卡的数据寄存器端口
+      cursor_h8_port          equ     0x0e                  ;光标寄存器索引端口，高8位
+      cursor_l8_port          equ     0x0f                  ;光标寄存器索引端口，低8位， 00表示光标在第0行0列，80表示光标在1行0列，这里的值其实是偏移量。行、列从0开始。
+      CR                      equ     0x0d                  ;CR回车ASCII码值，当前首行
+      LF                      equ     0x0a                  ;LF换行ASCII码值，垂直下行，不是下行的首行
+      
+      
       all_data_seg_sel    equ     0B00000000_00001_000      ;0x08，4GB数据段选择子
       mbr_code_seg_sel    equ     0B00000000_00010_000      ;0x10，初始化代码段（mbr）
       core_stack_seg_sel  equ     0B00000000_00011_000      ;0x18，初始化栈段（mbr、core）
@@ -29,15 +36,6 @@ SECTION header  vstart=0
 SECTION sys_routine vstart=0
  put_char:                                      ;打印一个字符
                                                 ;输入：cl=ASCII码
-
-      video_card_index_port   equ     0x3d4     ;显卡的功能索引寄存器端口
-      video_card_data_port    equ     0x3d5     ;显卡的数据寄存器端口
-      cursor_h8_port          equ     0x0e      ;光标寄存器索引端口，高8位
-      cursor_l8_port          equ     0x0f      ;光标寄存器索引端口，低8位， 00表示光标在第0行0列，80表示光标在1行0列，这里的值其实是偏移量。行、列从0开始。
-
-      CR                      equ     0x0d      ;CR回车ASCII码值，当前首行
-      LF                      equ     0x0a      ;LF换行ASCII码值，垂直下行，不是下行的首行
-
       push edi
       push esi
       push ax
@@ -306,6 +304,22 @@ SECTION sys_routine vstart=0
       add edi, 2
       loop .loop_clear
 
+   .rest_cursor:
+      mov dx, video_card_index_port
+      mov al, cursor_l8_port
+      out dx, al
+      mov dx, video_card_data_port
+      mov al, 0
+      out dx, al
+
+      mov dx, video_card_index_port
+      mov al, cursor_h8_port
+      out dx, al
+      mov dx, video_card_data_port
+      mov al, 0
+      out dx, al
+
+   .return:
       popad
       retf
 
