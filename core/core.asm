@@ -402,8 +402,7 @@ SECTION core_code   vstart=0
       test eax,0x0000_01ff                      ;eax原先是不是512字节对齐？只test低9位
       cmovnz eax, ebx                           ;低9位不是0说明不是512对齐，使用对齐结果
 
-   .allocate_memory:
-   ;为用户程序动态分配内存
+   .allocate_memory:                           
       mov ecx, eax                              ;实际需要申请的内存数量(字节单位)
       ;输入ecx=预期分配的字节数、输出：ecx=分配的内存起始线性地址
       call sys_routine_seg_sel:allocate_memory
@@ -424,6 +423,9 @@ SECTION core_code   vstart=0
             inc eax
             add ebx, 512
             loop .read_more
+
+   .setup_user_desc:                            
+      ;头段描述符
 
 
       pop es
