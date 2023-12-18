@@ -25,7 +25,7 @@ SECTION header  vstart=0
       core_entry        dd start                ;内核代码段入口点#10
                         dw core_code_seg_sel
 
-
+      [bits 32]
 SECTION sys_routine vstart=0
  put_char:                                      ;打印一个字符
                                                 ;输入：cl=ASCII码
@@ -169,7 +169,7 @@ SECTION sys_routine vstart=0
    .put_string_return:
       pop ebx
       pop eax
-      ret
+      retf
 
  make_gdt_descriptor:                           ;生成一个64位全局描述符表的描述符
                                                 ;输入：EAX=线性基地址
@@ -204,7 +204,7 @@ SECTION sys_routine vstart=0
 
       pop ecx
       pop ebx
-      ret
+      retf
 
 
  read_disk_hard_0:                              ;从硬盘读取一个逻辑扇区，0表示主硬盘
@@ -288,17 +288,58 @@ SECTION sys_routine vstart=0
       pop ecx
       pop edx 
       pop eax
-      ret  
+      retf
+ 
+ read_disk_hard_custom:                         ;读取主硬盘指定字节数，内部实际读取扇区数是向上舍入的
+                                                ;输入：ds:ebx = 硬盘数据缓冲区
 
 
 
 SECTION core_data   vstart=0
-      ;以下是内核数据
+      test1       db 0x20,0x20,0x20,0x20, 'Core Loading Success.', 0
+
+
+      cpu_brand0  db 0x0d,0x0a,0x0d,0x0a, 'Down is CPU Brand Info:', 0x0d,0x0a,0x0d,0x0a, 0
+      cpu_brand     times 49 db 0,              ;存放cpuinfo需48byte，额外的结束0，共49byte
 
 SECTION core_code   vstart=0
-      ;以下是内核代码
-
  start:
+      ;ds=core_data
+      mov ax, core_data_seg_sel
+      mov ds, ax
+      mov ebx, test1
+      call sys_routine_seg_sel:put_string
+
+ .printf_cpu_info:
+      mov ebx, cpu_brand0
+      call sys_routine_seg_sel:put_string
+
+      mov eax, 0x80000002
+      cpuid
+      mov [cpu_brand + 0x00], eax
+      mov [cpu_brand + 0x04], ebx
+      mov [cpu_brand + 0x08], ecx
+      mov [cpu_brand + 0x0c], edx
+
+      mov eax, 0x80000003
+      cpuid
+      mov [cpu_brand + 0x10], eax
+      mov [cpu_brand + 0x14], ebx
+      mov [cpu_brand + 0x18], ecx
+      mov [cpu_brand + 0x1c], edx
+
+      mov eax, 0x80000004
+      cpuid
+      mov [cpu_brand + 0x20], eax
+      mov [cpu_brand + 0x24], ebx
+      mov [cpu_brand + 0x28], ecx
+      mov [cpu_brand + 0x2c], edx
+
+      mov ebx, cpu_brand
+      call sys_routine_seg_sel:put_string
+
+
+
 
 SECTION tail
  file_end:
