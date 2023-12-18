@@ -290,9 +290,24 @@ SECTION sys_routine vstart=0
       pop eax
       retf
  
+ 
  read_disk_hard_custom:                         ;读取主硬盘指定字节数，内部实际读取扇区数是向上舍入的
                                                 ;输入：ds:ebx = 硬盘数据缓冲区
+ 
+ clear:                                         ;清除屏幕字符
+      pushad
 
+      mov ax, all_data_seg_sel
+      mov ds, ax
+      mov edi, 0xb_8000
+      mov ecx, 1000                             ;200*2/4
+   .loop_clear:
+      mov dword [edi], 0x0720_0720              ;0B0000_0111=0x07
+      add edi, 2
+      loop .loop_clear
+
+      popad
+      retf
 
 
 SECTION core_data   vstart=0
@@ -304,6 +319,8 @@ SECTION core_data   vstart=0
 
 SECTION core_code   vstart=0
  start:
+      call sys_routine_seg_sel:clear
+
       ;ds=core_data
       mov ax, core_data_seg_sel
       mov ds, ax
