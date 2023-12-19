@@ -233,8 +233,8 @@ SECTION sys_routine vstart=0
       add ebx, [pgdt+2]                         ;偏移量+gdt起始线性地址=新描述符在GDT中的线性地址
 
       ;2.安装                                                                 
-      mov [es:ebx+esi], eax                     
-      mov [es:ebx+esi+4], edx
+      mov [es:ebx], eax                     
+      mov [es:ebx+4], edx
 
       ;3.更新GDT界限值
       add word [pgdt], 8
@@ -498,7 +498,10 @@ SECTION core_code   vstart=0
             loop .read_more
    ;ds=4GB
    .setup_user_program_descriptor:              
-      pop edi                                   ;用户程序分配的内存（线性地址）    toA                      
+      pop edi                                   ;用户程序分配的内存（线性地址）    toA          
+
+      xchg bx, bx
+
       ;文件头段描述符
       mov eax, edi                              ;段描述符基地址
       mov ebx, [edi+0x04]                       ;文件头大小
@@ -538,7 +541,9 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:make_gdt_descriptor
       call sys_routine_seg_sel:install_gdt_descriptor
       mov [edi+0x1c], cx                        ;TODO-Tips：以后需要
-    
+      
+      xchg bx, bx
+
    ;重定位用户符号地址
    .salt_relocate:
       mov ax, [edi+0x04]                        ;用户程序头部段选择子
