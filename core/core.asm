@@ -15,7 +15,7 @@
       core_data_seg_sel   equ     0B00000000_00110_000      ;0x30，内核数据段选择子 
       core_code_seg_sel   equ     0B00000000_00111_000      ;0x38，内核代码段选择子
 
-      user_program_start_sector     equ   50
+      user_program_start_sector     equ   50                ;用户程序所在逻辑扇区号（LBA）
 
 ;=============================== header STR =================================
 SECTION header  vstart=0
