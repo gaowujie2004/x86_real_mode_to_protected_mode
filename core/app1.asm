@@ -18,14 +18,15 @@ SECTION header  vstart=0
       salt_count        dd (header_end-salt)/256 ;#0x24
 
       salt:                                      ;#0x28
-      PrintfString      db '@put_string', 0
+      PrintfString      db '@put_string',0
                         times 256-($-PrintfString) db 0
 
       ReadHardDisk      db '@read_head_disk',0
                         times 256-($-ReadHardDisk) db 0
 
-      TerminateProgram  db  '@terminateProgram'
+      TerminateProgram  db  '@terminateProgram',0
                         times 256-($-TerminateProgram) db 0
+      ;-----------------------------------------符号地址映射表
 
       
 
@@ -36,15 +37,17 @@ SECTION header  vstart=0
       [bits 32]  
 ;=============================== data seg =================================
 SECTION data vstart=0
-
- data_end:
+      buffer            times 1024 db  0
+      msg1              db 0x0d,0x0a, 0x20,0x20,0x20,0x20, 'Enter User Program'
+      data_end:
 ;================================= END ====================================
 
 
 
 ;=============================== stack seg ================================
 SECTION stack vstart=0
- stack_end:
+      times 2048 db 0xa0
+      stack_end:
 ;================================= END ====================================
 
 
@@ -53,7 +56,25 @@ SECTION stack vstart=0
 ;=============================== code seg =================================
 SECTION code vstart=0
  start:
-      mov ax, 90
+      mov ax, ds                                ;ds=头部段
+      mov fs, ax
+      mov gs, ax
+
+      mov ax, [fs:0x14]
+      mov ds, ax
+
+      mov ax, [fs:0x1c]
+      mov ss, ax
+      mov esp, stack_end
+
+      mov ebx, msg1
+      call far [fs:PrintfString]                ;间接远转移，必须要指定far
+
+
+      call far[fs:TerminateProgram]
+
+
+
  code_end:
 ;================================= END ====================================
 
