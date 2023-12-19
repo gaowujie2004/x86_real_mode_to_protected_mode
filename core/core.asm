@@ -172,7 +172,7 @@ SECTION sys_routine vstart=0
 
    .put_string_return:
       pop ebx
-      pop eax
+      pop ecx
       retf
 
  make_gdt_descriptor:                           ;生成一个64位全局描述符表的描述符
