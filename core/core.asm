@@ -536,8 +536,6 @@ SECTION core_code   vstart=0
     
    ;重定位用户符号地址
    .salt_relocate:
-      push edi
-
       mov ax, [edi+0x04]                        ;用户程序头部段选择子
       mov es, ax
       mov ax, core_data_seg_sel
@@ -585,8 +583,6 @@ SECTION core_code   vstart=0
       add edi, 256
       loop @for_user_salt
 
-   ;finish
-      pop edi
 
 
       pop es
