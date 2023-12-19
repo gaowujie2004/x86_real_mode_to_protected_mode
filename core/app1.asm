@@ -15,10 +15,9 @@ SECTION header  vstart=0
       stack_length      dd stack_end            ;栈段长度#0x20
 
       ;-----------------------------------------符号地址映射表
-      salt_count        dw (header_end-salt)/256
-                                                ;#0x24
+      salt_count        dd (header_end-salt)/256 ;#0x24
 
-      salt:
+      salt:                                      ;#0x28
       PrintfString      db '@put_string', 0
                         times 256-($-PrintfString) db 0
 

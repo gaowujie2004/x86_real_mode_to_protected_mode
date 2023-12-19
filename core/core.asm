@@ -401,6 +401,9 @@ SECTION sys_routine vstart=0
       pop eax
       pop ds
       retf
+
+ terminateUserProgram:                          ;结束用户程序，控制进入内核
+      retf
 ;=================================== END =====================================
 
 
@@ -411,6 +414,28 @@ SECTION core_data   vstart=0
       ram_alloc   dd 0x0010_0000                ;用户程序动态内存分配起始线性地址（未开启分页就是物理地址）
 
       core_buf    times 2048 db 0   
+
+      ;-------------------------SALT--------------------
+      salt:
+      salt_1      db '@put_string'
+                  times 256-($-salt_1) db 0
+                  dd put_string
+                  dw sys_routine_seg_sel
+
+      salt_2      db '@read_head_disk'
+                  times 256-($-salt_2) db 0
+                  dd read_disk_hard_0
+                  dw sys_routine_seg_sel
+
+      salt_last:
+      salt_3      db '@terminateProgram'
+                  times 256-($-salt_3) db 0
+                  dd terminateUserProgram
+                  dw sys_routine_seg_sel 
+
+      salt_item_size    equ   $-salt_last
+      salt_item_count   equ   ($-salt)/salt_item_size ;常量不占汇编地址
+      ;-------------------------SALT--------------------
 
       test1       db 'Core Loading Success.', 0
 
@@ -508,15 +533,67 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:make_gdt_descriptor
       call sys_routine_seg_sel:install_gdt_descriptor
       mov [edi+0x1c], cx                        ;TODO-Tips：以后需要
+    
+   ;重定位用户符号地址
+   .salt_relocate:
+      push edi
+
+      mov ax, [edi+0x04]                        ;用户程序头部段选择子
+      mov es, ax
+      mov ax, core_data_seg_sel
+      mov ds, ax
       
+      mov ecx, [es:0x24]
+      mov edi, 0x28                             ;u-salt偏移量
+      mov esi, salt                             ;c-salt偏移量       
+      cld
+   ;es:edi <- ds:esi                      
+   ;es=user_head、edi=u-salt表起始偏移量 
+   ;ds=core_data、esi=c-salt表起始偏移量
+   ;1.因为是修改用户程序中的salt表，u-salt是外围循环
+   @for_user_salt:                              ;TODO-Think：想了好久
+      push edi
+      push ecx
+      
+         ;循环core_salt
+         mov ecx, salt_item_count
+         mov esi, salt
+         @for_core_salt:
+            push ecx
+            push edi
+            push esi
+            
+            mov ecx, 256
+            repz cmpsb                          ;[es:edi]-[ds:esi] == 0 OR ecx!=0 才继续循环
+            jne @for_core_salt_continue         ;[es:edi]!=[ds:esi]（ZF=0），说明串中有不相同的
+
+            ;匹配上了,esi恰好指向后一个item的地址（因为ecx=256）。 修改[es:edi] 前六个字节，为 [esi]第256开始的6byte
+            mov eax, [esi]                      ;c-salt item公共函数段内偏移量
+            mov [es:edi-256], eax
+
+            mov ax, [esi+0x04]                  ;c-salt item公共函数的段选择子
+            mov [es:edi-252], ax
+         @for_core_salt_continue:
+            pop esi
+            pop edi
+            pop ecx
+            add esi, salt_item_size
+            loop @for_core_salt
+
+      pop ecx
+      pop edi
+      add edi, 256
+      loop @for_user_salt
+
+   ;finish
+      pop edi
+
 
       pop es
       pop ds
       popad
       ret
-
-
-
+ 
  start:
       call sys_routine_seg_sel:clear
 
