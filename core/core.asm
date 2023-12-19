@@ -15,7 +15,7 @@
       core_data_seg_sel   equ     0B00000000_00110_000      ;0x30，内核数据段选择子 
       core_code_seg_sel   equ     0B00000000_00111_000      ;0x38，内核代码段选择子
 
-      user_program_start_sector     equ   100
+      user_program_start_sector     equ   50
 
 ;=============================== header seg =================================
 SECTION header  vstart=0
@@ -444,7 +444,7 @@ SECTION core_data   vstart=0
       msg_load_relocate_ok    db 0x0d,0x0a, 'User program load relocate success', 0
       msg_start_user_program  db 0x0d,0x0a, 'Start enter User program..........', 0
 
-      cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a,0x0d,0x0a, 0
+      cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a, 0
       cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
 ;=================================== END =======================================
 
@@ -634,6 +634,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:put_string
 
  .enter_user_program:
+      xchg bx, bx
       mov esi, user_program_start_sector
       call load_relocate_user_program
 

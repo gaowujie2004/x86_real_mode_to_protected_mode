@@ -136,7 +136,6 @@ SECTION MBR
       lgdt [pgdt+0x7c00]
  
  .enter_core:
-      xchg bx, bx
       jmp far [edi+0x10]                        ;间接远转移，因为是在32位保护模式，
                                                 ;所以是代码段选择子:段内偏移量，而内核代码start标号处就是段内偏移量
       
