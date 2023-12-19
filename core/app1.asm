@@ -25,7 +25,7 @@ SECTION header  vstart=0
       ReadHardDisk      db '@read_head_disk',0
                         times 256-($-ReadHardDisk) db 0
 
-      TerminateProgram  db  '@TerminateProgram'
+      TerminateProgram  db  '@terminateProgram'
                         times 256-($-TerminateProgram) db 0
 
       
