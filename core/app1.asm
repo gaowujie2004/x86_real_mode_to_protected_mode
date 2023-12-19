@@ -16,6 +16,7 @@ SECTION header  vstart=0
 
       ;-----------------------------------------符号地址映射表
       salt_count        dw (header_end-salt)/256
+                                                ;#0x24
 
       salt:
       PrintfString      db '@put_string', 0
