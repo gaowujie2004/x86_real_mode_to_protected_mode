@@ -626,7 +626,10 @@ SECTION core_code   vstart=0
       mov ebx, msg_enter_core
       call sys_routine_seg_sel:put_string
  
+      ;可以继续执行其他程序
+      ;可以执行清理内存的任务
 
+      hlt
 
 
 
