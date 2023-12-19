@@ -209,6 +209,47 @@ SECTION sys_routine vstart=0
       retf
 
 
+ install_gdt_descriptor:                        ;将一个64位描述符安装到GDT中
+                                                ;输入：EDX(h32):EAX(l32)=描述符
+                                                ;输出：CX=当前描述符选择子
+      push ebx
+      push ds
+      push es 
+
+      ;ds=core_data、es=4GB、因为是线性地址，那么基地址应该是0故es是4gb段选择子
+      mov bx, core_data_seg_sel
+      mov ds, bx
+      mov bx, all_data_seg_sel
+      mov es, bx
+
+      ;1.计算新描述符在表中偏移量
+      sgdt [pgdt]
+      movzx ebx, word [pgdt]                    ;旧gdt界限值
+      inc bx                                    ;界限值+1等于长度，即新描述符在表中的偏移量
+                                                ;TODO-Tips：重点关注，加电预置的GDT界限是0xFFFF，第一次安装时0xFFFF+1=0x1_0000，但bx只存储2byte，进位舍弃
+                                                ;若使用ebx，则进位还会保留，因为ebx 4byte
+      add ebx, [pgdt+2]                         ;偏移量+gdt起始线性地址=新描述符在GDT中的线性地址
+      
+      ;2.安装                                                                 
+      mov [es:ebx+esi], eax                     
+      mov [es:ebx+esi+4], edx
+
+      ;3.更新GDT界限值
+      add word [pgdt], 8
+
+      ;4.加载新的gdt
+      lgdt [pgdt]
+
+      ;5.计算新描述符对应的选择子
+      mov cx, [pgdt]
+      shr cx, 3                                ;ecx除8，描述符在表中的索引
+      shl cx, 3                                ;将索引值移到选择子索引位，低3为位中TI=0，RPL=00
+
+
+      pop es
+      pop ds
+      pop ebx
+      retf
  read_disk_hard_0:                              ;从硬盘读取一个逻辑扇区，0表示主硬盘
                                                 ;输入： eax=起始逻辑扇区号（28bit）
                                                 ;      ds:ebx=数据缓冲区起始地址
@@ -365,6 +406,8 @@ SECTION sys_routine vstart=0
 
 ;============================== core_data seg ================================
 SECTION core_data   vstart=0
+      pgdt        dd 0x0000_0000                ;暂存GDTR的数据，低两位是界限
+
       ram_alloc   dd 0x0010_0000                   ;用户程序动态内存分配起始线性地址（未开启分页就是物理地址）
 
       core_buf    times 2048 db 0   
@@ -410,7 +453,7 @@ SECTION core_code   vstart=0
 
    .load_user_program:
    ;eax 用户程序所占字节数(512对齐)
-      push eax
+      push ebx                                  ;暂存为用户程序分配的内存（线性地址）toA
       shr eax, 9                                ;eax/512，2^9=512
       mov ecx, eax                              ;用户程序所占扇区数
       ;ds=4GB
@@ -424,14 +467,25 @@ SECTION core_code   vstart=0
             add ebx, 512
             loop .read_more
 
-   .setup_user_desc:                            
-      ;头段描述符
+   .setup_user_program_descriptor:              ;ds=4GB
+      pop edi                                   ;用户程序分配的内存（线性地址）    toA                      
+      ;文件头段描述符
+      mov eax, edi                              ;段描述符基地址
+      mov ebx, [edi+0x04]                       ;文件头大小
+      dec ebx                                   ;段界限
+      mov ecx, 0x0040_9200                      ;数据段属性; G DB L AVL=0100、段界限=0、P DPL S=1001、TYPE=0010
+      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:install_gdt_descriptor
 
 
+   .return:
       pop es
       pop ds
       popad
       ret
+
+
+
  start:
       call sys_routine_seg_sel:clear
 
