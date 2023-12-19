@@ -440,11 +440,11 @@ SECTION core_data   vstart=0
       salt_item_count   equ   ($-salt)/salt_item_size       ;常量不占汇编地址
       ;-------------------------SALT--------------------
 
-      msg_enter_core          db 0x0d,0x0a, 'Core enter success................', 0
+      msg_enter_core          db            'Core enter success................', 0
       msg_load_relocate_ok    db 0x0d,0x0a, 'User program load relocate success', 0
       msg_start_user_program  db 0x0d,0x0a, 'Start enter User program..........', 0
 
-      cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a, 0
+      cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a, 0x20,0x20,0x20,0x20, 0
       cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
 ;============================== core_data END =======================================
 
