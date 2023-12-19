@@ -38,7 +38,7 @@ SECTION header  vstart=0
 ;=============================== data seg =================================
 SECTION data vstart=0
       buffer            times 1024 db  0
-      msg1              db 0x0d,0x0a, 0x20,0x20,0x20,0x20, 'Enter User Program'
+      msg1              db 0x0d,0x0a, 0x20,0x20,0x20,0x20, 'Enter User Program',0
       data_end:
 ;================================= END ====================================
 
@@ -67,11 +67,13 @@ SECTION code vstart=0
       mov ss, ax
       mov esp, stack_end
 
+      xchg bx, bx
       mov ebx, msg1
       call far [fs:PrintfString]                ;间接远转移，必须要指定far
 
 
-      call far[fs:TerminateProgram]
+      ; call far [fs:TerminateProgram]
+      jmp $
 
 
 
