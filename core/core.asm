@@ -229,7 +229,7 @@ SECTION sys_routine vstart=0
                                                 ;TODO-Tips：重点关注，加电预置的GDT界限是0xFFFF，第一次安装时0xFFFF+1=0x1_0000，但bx只存储2byte，进位舍弃
                                                 ;若使用ebx，则进位还会保留，因为ebx 4byte
       add ebx, [pgdt+2]                         ;偏移量+gdt起始线性地址=新描述符在GDT中的线性地址
-      
+
       ;2.安装                                                                 
       mov [es:ebx+esi], eax                     
       mov [es:ebx+esi+4], edx
@@ -408,7 +408,7 @@ SECTION sys_routine vstart=0
 SECTION core_data   vstart=0
       pgdt        dd 0x0000_0000                ;暂存GDTR的数据，低两位是界限
 
-      ram_alloc   dd 0x0010_0000                   ;用户程序动态内存分配起始线性地址（未开启分页就是物理地址）
+      ram_alloc   dd 0x0010_0000                ;用户程序动态内存分配起始线性地址（未开启分页就是物理地址）
 
       core_buf    times 2048 db 0   
 
