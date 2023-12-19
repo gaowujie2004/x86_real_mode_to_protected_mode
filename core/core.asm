@@ -434,7 +434,7 @@ SECTION core_data   vstart=0
                   dw sys_routine_seg_sel 
 
       salt_item_size    equ   $-salt_last
-      salt_item_count   equ   ($-salt)/salt_item_size ;常量不占汇编地址
+      salt_item_count   equ   ($-salt)/salt_item_size       ;常量不占汇编地址
       ;-------------------------SALT--------------------
 
       msg_enter_core          db 'Core enter success......', 0
@@ -442,7 +442,7 @@ SECTION core_data   vstart=0
                               db
 
       cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a,0x0d,0x0a, 0
-      cpu_brand               times 49 db 0,              ;存放cpuinfo需48byte，额外的结束0，共49byte
+      cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
 ;=================================== END =======================================
 
 
