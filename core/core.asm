@@ -478,7 +478,6 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:install_gdt_descriptor
 
 
-   .return:
       pop es
       pop ds
       popad
