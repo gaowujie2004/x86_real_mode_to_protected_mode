@@ -13,7 +13,9 @@
 
       sys_routine_seg_sel equ     0B00000000_00101_000      ;0x28，内核公共代码段选择子  
       core_data_seg_sel   equ     0B00000000_00110_000      ;0x30，内核数据段选择子 
-      core_code_seg_sel   equ     0B00000000_00111_000      ;0x38，内核代码段选择子 
+      core_code_seg_sel   equ     0B00000000_00111_000      ;0x38，内核代码段选择子
+
+      user_program_start_sector     equ   100
 
 ;=============================== header seg =================================
 SECTION header  vstart=0
@@ -415,6 +417,7 @@ SECTION core_data   vstart=0
 
       core_buf    times 2048 db 0               ;内核数据缓冲区，不用被缓冲区吓到，本质上就是连续的内存，方便内核对数据进行加工、操作的
 
+      esp_pointer dd 0x0000_0000                ;暂存内核ESP
       ;-------------------------SALT--------------------
       salt:
       salt_1      db '@put_string'
@@ -437,9 +440,9 @@ SECTION core_data   vstart=0
       salt_item_count   equ   ($-salt)/salt_item_size       ;常量不占汇编地址
       ;-------------------------SALT--------------------
 
-      msg_enter_core          db 'Core enter success......', 0
-      msg_enter_user_program
-                              db
+      msg_enter_core          db 0x0d,0x0a, 'Core enter success................', 0
+      msg_load_relocate_ok    db 0x0d,0x0a, 'User program load relocate success', 0
+      msg_start_user_program  db 0x0d,0x0a, 'Start enter User program..........', 0
 
       cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a,0x0d,0x0a, 0
       cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
@@ -600,6 +603,30 @@ SECTION core_code   vstart=0
       mov ds, ax
       mov ebx, msg_enter_core
       call sys_routine_seg_sel:put_string
+
+      mov esi, user_program_start_sector
+      call load_relocate_user_program
+
+      mov ebx, msg_load_relocate_ok
+      call sys_routine_seg_sel:put_string
+
+      mov [esp_pointer], esp
+      mov ds, ax                                ;load_relocate_user_program的返回值，用户程序头部段选择子
+
+      jmp far [0x08]                            ;间接远转移（必须指明far），因为这是32位保护模式，所以用的是段选择子。
+
+ .return_pointer:
+      mov ax, core_data_seg_sel
+      mov ds, ax
+
+      mov ax, core_stack_seg_sel
+      mov ss, ax
+      mov esp, [esp_pointer]
+
+      mov ebx, msg_enter_core
+      call sys_routine_seg_sel:put_string
+ 
+
 
 
 
