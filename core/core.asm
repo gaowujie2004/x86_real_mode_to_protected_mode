@@ -437,9 +437,9 @@ SECTION core_data   vstart=0
       salt_item_count   equ   ($-salt)/salt_item_size ;常量不占汇编地址
       ;-------------------------SALT--------------------
 
-      msg_enter_core       db 'Core Loading Success.', 0
+      msg_enter_core       db 'Core enter success......', 0
 
-      cpu_brand0  db 0x0d,0x0a, 'Down is CPU Brand Info:', 0x0d,0x0a,0x0d,0x0a, 0
+      cpu_brand0  db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a,0x0d,0x0a, 0
       cpu_brand     times 49 db 0,              ;存放cpuinfo需48byte，额外的结束0，共49byte
 ;=================================== END =======================================
 
@@ -598,6 +598,9 @@ SECTION core_code   vstart=0
       mov ds, ax
       mov ebx, msg_enter_core
       call sys_routine_seg_sel:put_string
+
+
+
 
  .printf_cpu_info:
       mov ebx, cpu_brand0
