@@ -433,8 +433,8 @@ SECTION core_data   vstart=0
       salt_last:
       salt_3      db '@terminateProgram'
                   times 256-($-salt_3) db 0
-                  dd terminateUserProgram
-                  dw sys_routine_seg_sel 
+                  dd return_pointer
+                  dw core_code_seg_sel 
 
       salt_item_size    equ   $-salt_last
       salt_item_count   equ   ($-salt)/salt_item_size       ;常量不占汇编地址
@@ -500,8 +500,6 @@ SECTION core_code   vstart=0
    .setup_user_program_descriptor:              
       pop edi                                   ;用户程序分配的内存（线性地址）    toA          
 
-      xchg bx, bx
-
       ;文件头段描述符
       mov eax, edi                              ;段描述符基地址
       mov ebx, [edi+0x04]                       ;文件头大小
@@ -541,8 +539,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:make_gdt_descriptor
       call sys_routine_seg_sel:install_gdt_descriptor
       mov [edi+0x1c], cx                        ;TODO-Tips：以后需要
-      
-      xchg bx, bx
+
 
    ;重定位用户符号地址
    .salt_relocate:
@@ -599,7 +596,7 @@ SECTION core_code   vstart=0
       pop es
       pop ds
       ret
- 
+ ;------------------------------------------------------------
  start:
       call sys_routine_seg_sel:clear
 
@@ -639,19 +636,18 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:put_string
 
  .enter_user_program:
-      xchg bx, bx
       mov esi, user_program_start_sector
       call load_relocate_user_program
 
       mov ebx, msg_load_relocate_ok
       call sys_routine_seg_sel:put_string
-
+      
       mov [esp_pointer], esp
       mov ds, ax                                ;load_relocate_user_program的返回值，用户程序头部段选择子
 
       jmp far [0x08]                            ;间接远转移（必须指明far），因为这是32位保护模式，所以用的是段选择子。
 
- .return_pointer:
+ return_pointer:
       mov ax, core_data_seg_sel
       mov ds, ax
 
