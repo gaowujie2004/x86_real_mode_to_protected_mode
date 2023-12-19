@@ -449,9 +449,9 @@ SECTION core_code   vstart=0
  load_relocate_user_program:                    ;加载重定位用户程序
                                                 ;输入：ESI=起始逻辑扇区号
                                                 ;返回：AX=指向用户程序头部的段选择子
-      pushad
       push ds
       push es
+      pushad
 
    .get_user_program_size:
    ;ds=core_data
@@ -584,10 +584,10 @@ SECTION core_code   vstart=0
       loop @for_user_salt
 
 
-
+      popad
+      mov ax, [es:0x04]                         ;用户程序头部的段选择子
       pop es
       pop ds
-      popad
       ret
  
  start:
