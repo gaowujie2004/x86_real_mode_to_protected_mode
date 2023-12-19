@@ -601,38 +601,9 @@ SECTION core_code   vstart=0
       ;ds=core_data
       mov ax, core_data_seg_sel
       mov ds, ax
-      mov ebx, msg_enter_core
-      call sys_routine_seg_sel:put_string
-
-      mov esi, user_program_start_sector
-      call load_relocate_user_program
-
-      mov ebx, msg_load_relocate_ok
-      call sys_routine_seg_sel:put_string
-
-      mov [esp_pointer], esp
-      mov ds, ax                                ;load_relocate_user_program的返回值，用户程序头部段选择子
-
-      jmp far [0x08]                            ;间接远转移（必须指明far），因为这是32位保护模式，所以用的是段选择子。
-
- .return_pointer:
-      mov ax, core_data_seg_sel
-      mov ds, ax
-
-      mov ax, core_stack_seg_sel
-      mov ss, ax
-      mov esp, [esp_pointer]
 
       mov ebx, msg_enter_core
       call sys_routine_seg_sel:put_string
- 
-      ;可以继续执行其他程序
-      ;可以执行清理内存的任务
-
-      hlt
-
-
-
 
  .printf_cpu_info:
       mov ebx, cpu_brand0
@@ -662,6 +633,33 @@ SECTION core_code   vstart=0
       mov ebx, cpu_brand
       call sys_routine_seg_sel:put_string
 
+ .enter_user_program:
+      mov esi, user_program_start_sector
+      call load_relocate_user_program
+
+      mov ebx, msg_load_relocate_ok
+      call sys_routine_seg_sel:put_string
+
+      mov [esp_pointer], esp
+      mov ds, ax                                ;load_relocate_user_program的返回值，用户程序头部段选择子
+
+      jmp far [0x08]                            ;间接远转移（必须指明far），因为这是32位保护模式，所以用的是段选择子。
+
+ .return_pointer:
+      mov ax, core_data_seg_sel
+      mov ds, ax
+
+      mov ax, core_stack_seg_sel
+      mov ss, ax
+      mov esp, [esp_pointer]
+
+      mov ebx, msg_enter_core
+      call sys_routine_seg_sel:put_string
+ 
+      ;可以继续执行其他程序
+      ;可以执行清理内存的任务
+
+      hlt
 ;=================================== END =============================
 
 
