@@ -466,8 +466,8 @@ SECTION core_code   vstart=0
             inc eax
             add ebx, 512
             loop .read_more
-
-   .setup_user_program_descriptor:              ;ds=4GB
+   ;ds=4GB
+   .setup_user_program_descriptor:              
       pop edi                                   ;用户程序分配的内存（线性地址）    toA                      
       ;文件头段描述符
       mov eax, edi                              ;段描述符基地址
@@ -476,7 +476,39 @@ SECTION core_code   vstart=0
       mov ecx, 0x0040_9200                      ;数据段属性; G DB L AVL=0100、段界限=0、P DPL S=1001、TYPE=0010
       call sys_routine_seg_sel:make_gdt_descriptor
       call sys_routine_seg_sel:install_gdt_descriptor
+      mov [edi+0x04], cx                        ;文件头大小字段以后是该段的选择子
 
+      ;代码段描述符
+      mov eax, edi
+      add eax, [edi+0x0c]                       ;代码段基地址
+      mov ebx, [edi+0x10]                       ;代码段长度
+      dec ebx                                  
+      mov ecx, 0x0040_9800                      ;代码段属性；G DB L AVL=0100、段界限=0 | P DPL S=1001、TYPE=1000（只执行）
+      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:install_gdt_descriptor
+      mov [edi+0x0c], cx                        ;TODO-Tips：以后需要
+
+
+      ;数据段描述符
+      mov eax, edi
+      add eax, [edi+0x14]                       ;数据段基地址
+      mov ebx, [edi+0x18]                       ;数据段长度
+      dec ebx                                  
+      mov ecx, 0x0040_9200                      ;数据段属性；G DB L AVL=0100、段界限=0 | P DPL S=1001、TYPE=0010（可读可写）
+      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:install_gdt_descriptor
+      mov [edi+0x14], cx                        ;TODO-Tips：以后需要
+
+      ;栈段描述符
+      mov eax, edi
+      add eax, [edi+0x1c]                       ;栈段基地址
+      mov ebx, [edi+0x20]                       ;栈段长度
+      dec ebx                                  
+      mov ecx, 0x0040_9200                      ;栈段属性；G DB L AVL=0100、段界限=0 | P DPL S=1001、TYPE=0010（可读可写）
+      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:install_gdt_descriptor
+      mov [edi+0x1c], cx                        ;TODO-Tips：以后需要
+      
 
       pop es
       pop ds
