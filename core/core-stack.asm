@@ -405,8 +405,7 @@ SECTION sys_routine vstart=0
       pop ds
       retf
 
- terminateUserProgram:                          ;结束用户程序，控制进入内核
-      retf
+
 ;============================== sys_routine END =====================================
 
 
@@ -419,6 +418,9 @@ SECTION core_data   vstart=0
       core_buf    times 2048 db 0               ;内核数据缓冲区，不用被缓冲区吓到，本质上就是连续的内存，方便内核对数据进行加工、操作的
 
       esp_pointer dd 0x0000_0000                ;暂存内核ESP
+
+      user_ss     dw 0x00                       ;用户程序的栈段选择子
+      user_esp    dd 0x0000                     ;用户程序的栈段起始偏移量
       ;-------------------------SALT--------------------
       salt:
       salt_1      db '@put_string'
@@ -531,15 +533,24 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:install_gdt_descriptor
       mov [edi+0x14], cx                        ;TODO-Tips：以后需要
 
-      ;栈段描述符
-      mov eax, edi
-      add eax, [edi+0x1c]                       ;栈段基地址
-      mov ebx, [edi+0x20]                       ;栈段长度
-      dec ebx                                  
-      mov ecx, 0x0040_9200                      ;栈段属性；G DB L AVL=0100、段界限=0 | P DPL S=1001、TYPE=0010（可读可写）
+      ;栈段描述符，内核动态分配4KB，用户程序无需指定
+      mov ecx, 0x1000
+      call sys_routine_seg_sel:allocate_memory
+
+      mov eax, ecx                              ;栈段基地址
+      mov ebx, 0x1000-1                         ;栈段界限                                 
+      mov ecx, 0x0040_9200                      ;栈段属性；G DB L AVL=0100、段界限=0 | P DPL S=1001、TYPE=0010（可读可写，向上扩展的段）
       call sys_routine_seg_sel:make_gdt_descriptor
       call sys_routine_seg_sel:install_gdt_descriptor
-      mov [edi+0x1c], cx                        ;TODO-Tips：以后需要
+
+      xchg bx, bx 
+      
+      push ds
+      mov ax, core_data_seg_sel
+      mov ds, ax
+      mov [user_ss], cx
+      mov dword [user_esp], 0x1000
+      pop ds
 
 
    ;重定位用户符号地址
@@ -549,8 +560,8 @@ SECTION core_code   vstart=0
       mov ax, core_data_seg_sel
       mov ds, ax
       
-      mov ecx, [es:0x24]
-      mov edi, 0x28                             ;u-salt偏移量
+      mov ecx, [es:0x1c]
+      mov edi, 0x20                             ;u-salt偏移量
       mov esi, salt                             ;c-salt偏移量       
       cld
    ;es:edi <- ds:esi                      
@@ -635,13 +646,21 @@ SECTION core_code   vstart=0
 
       mov ebx, cpu_brand
       call sys_routine_seg_sel:put_string
-
+ ;ds=core_data
  .enter_user_program:
+      xchg bx, bx
+      
       mov esi, user_program_start_sector
       call load_relocate_user_program
 
       mov ebx, msg_load_relocate_ok
       call sys_routine_seg_sel:put_string
+
+      xchg bx, bx
+
+      mov bx, [user_ss]                         ;切换到用户程序栈
+      mov ss, bx
+      mov esp, [user_esp]
       
       mov [esp_pointer], esp
       mov ds, ax                                ;load_relocate_user_program的返回值，用户程序头部段选择子
@@ -652,7 +671,7 @@ SECTION core_code   vstart=0
       mov ax, core_data_seg_sel
       mov ds, ax
 
-      mov ax, core_stack_seg_sel
+      mov ax, core_stack_seg_sel                ;切换到内核栈
       mov ss, ax
       mov esp, [esp_pointer]
 

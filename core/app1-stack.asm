@@ -13,13 +13,10 @@ SECTION header  vstart=0
       data_seg          dd section.data.start   ;数据段位置#0x14
       data_length       dd data_end             ;数据段长度#0x18
 
-      stack_seg         dd section.stack.start  ;栈段段位置#0x1c
-      stack_length      dd stack_end            ;栈段长度#0x20
-
       ;-----------------------------------------符号地址映射表
-      salt_count        dd (header_end-salt)/256 ;#0x24
+      salt_count        dd (header_end-salt)/256 ;#0x1c
 
-      salt:                                      ;#0x28
+      salt:                                      ;#0x20
       PrintfString      db '@put_string',0
                         times 256-($-PrintfString) db 0
 
@@ -45,30 +42,16 @@ SECTION data vstart=0
 ;=============================== data END =================================
 
 
-
-;=============================== stack STA ================================
-SECTION stack vstart=0
-      times 2048 db 0xa0
-      stack_end:
-;=============================== stack END ================================
-
-
-
-
-
 ;=============================== code STA =================================
 SECTION code vstart=0
  start:
-      mov ax, ds                                ;ds=头部段
+      mov ax, ds                                ;ds=头部段，这是内核在转移控制权时设置的
       mov fs, ax
       mov gs, ax
 
       mov ax, [fs:0x14]
       mov ds, ax
 
-      mov ax, [fs:0x1c]
-      mov ss, ax
-      mov esp, stack_end
 
       xchg bx, bx
       mov ebx, msg1
