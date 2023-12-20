@@ -71,9 +71,7 @@ SECTION code vstart=0
       mov ebx, msg1
       call far [fs:PrintfString]                ;间接远转移，必须要指定far
 
-
-      ; call far [fs:TerminateProgram]
-      jmp $
+      call far [fs:TerminateProgram]
 
 
 
