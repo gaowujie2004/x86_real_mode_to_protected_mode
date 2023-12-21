@@ -595,6 +595,8 @@ SECTION core_code   vstart=0
       pop ds
       ret
  ;------------------------------------------------------------
+ 
+ ;ds=core_data
  start:
       call sys_routine_seg_sel:clear
 
