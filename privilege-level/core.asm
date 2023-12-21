@@ -515,19 +515,72 @@ SECTION core_data   vstart=0
 
 ;============================== core_code STR =================================
 SECTION core_code   vstart=0
- load_relocate_user_program:                    ;加载重定位用户程序
-                                                ;输入：ESI=起始逻辑扇区号
-                                                ;返回：AX=指向用户程序头部的段选择子
+ install_ldt_descriptor:                        ;在ldt中安装一个描述符
+                                                ;输入：EDX(h32):EAX(l32)=64位段描述符
+                                                ;      EBX=tcb起始线性地址
+                                                ;输出：cx=描述符选择子
+      push ds
+      push esi
+
+      mov cx, all_data_seg_sel
+      mov ds, cx
+      
+      mov esi, [ebx+0x0c]                       ;LDT起始线性地址
+      xor ecx, ecx
+      mov cx, [ebx+0x0a]                        ;LDT段界限
+      inc cx                                    ;LDT长度，TODO-Tips：不能是inc ecx
+      
+      ;安装新段描述符
+      mov [esi+ecx], eax                        ;新描述符的起始线性地址
+      mov [esi+ecx+0x04], edx
+
+      ;新的LDT段界限
+      add cx, 7
+      mov [ebx+0x0a], cx
+
+      ;返回新段描述符的选择子
+      shr cx, 3                                 ;cx/8
+      shl cx, 3                                 ;将索引左移3位，空出TI、RPL位
+      or  cx, 0B00000000_00000_100              ;TI=1，RPL=00
+
+      pop esi
+      pop ds
+      ret
+
+
+ load_relocate_user_program:                    ;加载重定位用户程序，通过栈传递参数
+                                                ;输入：push 用户程序起始逻辑扇区号
+                                                ;      push 当前tcb起始线性地址
+                                                ;返回：无
+      pushad
       push ds
       push es
-      pushad
 
-   .get_user_program_size:
-   ;ds=core_data
+      ;DS=core_data
+      ;ES=4GB
       mov ax, core_data_seg_sel
       mov ds, ax
+      mov ax, all_data_seg_sel
+      mov es, ax
 
-      mov eax, esi
+      mov ebp, esp
+      ;ebp+11*4 = tcb起始线性地址
+      ;ebp+12*4 = 用户程序起始LBA
+
+   ;esi=tcb起始线性地址
+   ;tcb起始线性地址
+      mov esi, [ss:ebp+11*4]  
+
+   .ldt:             
+      mov ecx, 160                              ;为用户程序的LDT分配20个描述符
+      call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
+
+      ;放入tcb中
+      mov dword [es:esi+0x0c], esi              ;LDT起始线性地址
+      mov word [es:esi+0x0a], 0xffff            ;LDT段界限
+                                                ;与GDT格式完全一样
+   .get_user_program_size:
+      mov eax, [ss:ebp+12*4]                    ;用户程序起始逻辑扇区号
       mov ebx, core_buf      
       call sys_routine_seg_sel:read_disk_hard_0
 
@@ -545,7 +598,11 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:allocate_memory
       mov ebx, ecx                              ;暂存分配的线性地址
 
+      ;用户程序起始线性地址登记到tcb
+      mov [es:esi+0x06], ebx
+
    .load_user_program:
+   ;ds=4gb
    ;eax 用户程序所占字节数(512对齐)
       push ebx                                  ;暂存为用户程序分配的内存（线性地址）toA
       shr eax, 9                                ;eax/512，2^9=512
@@ -553,56 +610,71 @@ SECTION core_code   vstart=0
       ;ds=4GB
       mov ax, all_data_seg_sel
       mov ds, ax
-      mov eax, esi                              
+      mov eax, [ss:ebp+12*4]                    ;用户程序起始LBA                          
       .read_more:
             ;ebx用户程序分配的内存起始线性地址，所以ds必须得是0-4GB（0为段基址）
             call sys_routine_seg_sel:read_disk_hard_0
             inc eax
             add ebx, 512
             loop .read_more
-   ;ds=4GB
-   .setup_user_program_descriptor:              
+
+   
+   
+   .setup_user_program_descriptor:              ;DS=4GB、EDI=用户程序起始线性地址、ESI=tcb起始线性地址
       pop edi                                   ;用户程序分配的内存（线性地址）    toA          
 
       ;文件头段描述符
       mov eax, edi                              ;段描述符基地址
-      mov ebx, [edi+0x04]                       ;文件头大小
+      mov ebx, [edi+0x04]                       
       dec ebx                                   ;段界限
-      mov ecx, 0x0040_9200                      ;数据段属性; G DB L AVL=0100、段界限=0、P DPL S=1001、TYPE=0010
+      mov ecx, 0x0040_f200                      ;数据段属性; G DB L AVL=0100、段界限=0 | P DPL S=1_11_1、TYPE=0010；TODO-Tips：DPL=3
       call sys_routine_seg_sel:make_gdt_descriptor
-      call sys_routine_seg_sel:install_gdt_descriptor
+
+      mov ebx, esi
+      call fill_descriptor_in_ldt
+      or cx, 0B00000000_00000_011               ;RPL=3
       mov [edi+0x04], cx                        ;文件头大小字段以后是该段的选择子
+      mov [esi+0x044],cx                        ;tcb登记程序头部选择子
 
       ;代码段描述符
       mov eax, edi
       add eax, [edi+0x0c]                       ;代码段基地址
-      mov ebx, [edi+0x10]                       ;代码段长度
-      dec ebx                                  
-      mov ecx, 0x0040_9800                      ;代码段属性；G DB L AVL=0100、段界限=0 | P DPL S=1001、TYPE=1000（只执行）
+      mov ebx, [edi+0x10]                       
+      dec ebx                                   ;段界限
+      mov ecx, 0x0040_f800                      ;代码段属性；G DB L AVL=0100、段界限=0 | P DPL S=1_11_1、TYPE=1000（只执行）；TODO-Tips：DPL=3
       call sys_routine_seg_sel:make_gdt_descriptor
-      call sys_routine_seg_sel:install_gdt_descriptor
-      mov [edi+0x0c], cx                        ;TODO-Tips：以后需要
+
+      mov ebx, esi                              ;tcb起始线性地址
+      call fill_descriptor_in_ldt
+      or cx, 0B00000000_00000_011               ;RPL=3
+      mov [edi+0x0c], cx                        ;登记代码段选择子到用户程序头部
 
 
       ;数据段描述符
       mov eax, edi
       add eax, [edi+0x14]                       ;数据段基地址
-      mov ebx, [edi+0x18]                       ;数据段长度
-      dec ebx                                  
-      mov ecx, 0x0040_9200                      ;数据段属性；G DB L AVL=0100、段界限=0 | P DPL S=1001、TYPE=0010（可读可写）
+      mov ebx, [edi+0x18]                       
+      dec ebx                                   ;段界限
+      mov ecx, 0x0040_f200                      ;数据段属性；G DB L AVL=0100、段界限=0 | P DPL S=1111、TYPE=0010（可读可写）
       call sys_routine_seg_sel:make_gdt_descriptor
-      call sys_routine_seg_sel:install_gdt_descriptor
-      mov [edi+0x14], cx                        ;TODO-Tips：以后需要
+
+      mov ebx, esi                              ;tcb起始线性地址
+      call fill_descriptor_in_ldt
+      or cx, 0B00000000_00000_011               ;RPL=3
+      mov [edi+0x14], cx                        ;登记数据段到用户程序头部
 
       ;栈段描述符
       mov eax, edi
       add eax, [edi+0x1c]                       ;栈段基地址
-      mov ebx, [edi+0x20]                       ;栈段长度
-      dec ebx                                  
-      mov ecx, 0x0040_9200                      ;栈段属性；G DB L AVL=0100、段界限=0 | P DPL S=1001、TYPE=0010（可读可写）
+      mov ebx, [edi+0x20]                       
+      dec ebx                                   ;段界限
+      mov ecx, 0x0040_f200                      ;栈段属性；G DB L AVL=0100、段界限=0 | P DPL S=1111、TYPE=0010（可读可写）
       call sys_routine_seg_sel:make_gdt_descriptor
-      call sys_routine_seg_sel:install_gdt_descriptor
-      mov [edi+0x1c], cx                        ;TODO-Tips：以后需要
+
+      mov ebx, esi                              ;tcb起始线性地址
+      call fill_descriptor_in_ldt
+      or cx, 0B00000000_00000_011  
+      mov [edi+0x1c], cx                        ;登记栈段选择子到用户程序头部
 
 
    ;重定位用户符号地址
@@ -654,11 +726,10 @@ SECTION core_code   vstart=0
       add edi, 256
       loop @for_user_salt
 
-
-      popad
-      mov ax, [es:0x04]                         ;用户程序头部的段选择子
+   .return:
       pop es
       pop ds
+      popad
       ret
  ;------------------------------------------------------------
  
@@ -723,12 +794,14 @@ SECTION core_code   vstart=0
       call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
 
  .create_tcb:
-      
- 
- 
+      mov ecx, 0x46                             ;tcb size
+      call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
+      call sys_routine_seg_sel:append_tcb
+
  ;ds=用户程序头部段
  .enter_user_program:
-      mov esi, user_program_start_sector
+      push dword 50
+      push ecx                                  ;ecx=分配内存的起始线性地址、也等于当前tcb起始线性地址
       call load_relocate_user_program
 
       mov ebx, msg_load_relocate_ok
