@@ -423,6 +423,49 @@ SECTION sys_routine vstart=0
       pop ds
       retf
 
+ append_tcb:                                    ;添加tcb到tcb链表尾部
+                                                ;输入：ECX=tcb起始线性地址
+      push ds
+      push es
+      push eax
+      push ebx
+
+   ;ds=core_data、es=4GB
+   .seg:
+      mov ax, core_data_seg_sel
+      mov ds, ax
+      mov ax, all_data_seg_sel
+      mov es, ax
+
+   .new_node_next_clear:
+      mov dword [es:ecx+0x00], 0                ;因为是线性地址，所以使用es（0-4gb)段
+
+   .is_empty:
+      mov eax, [tcb_head]
+      or eax, eax
+      jz .empty
+   
+   .find_last:
+      mov ebx, eax                              ;暂存eax（当前节点地址）
+      mov eax, [es:ebx+0x00]                    ;第一个节点的.next的值
+      or eax, eax
+      jnz .find_last
+
+   .set_last_node:
+      mov [es:ebx+0x00], ecx                    ;最后一个tcb的起始线性地址
+      jmp .ref
+
+   .empty:
+      mov [tcb_head], ecx
+
+   .ref:
+      pop ebx
+      pop eax
+      pop es
+      pop ds
+
+
+
 ;============================== sys_routine END =====================================
 
 
@@ -435,6 +478,8 @@ SECTION core_data   vstart=0
       core_buf    times 2048 db 0               ;内核数据缓冲区，不用被缓冲区吓到，本质上就是连续的内存，方便内核对数据进行加工、操作的
 
       esp_pointer dd 0x0000_0000                ;暂存内核ESP
+
+      tcb_head    dd 0x0000_0000                ;任务控制块链表
       ;-------------------------SALT--------------------
       salt:
       salt_1      db '@put_string'
@@ -677,6 +722,10 @@ SECTION core_code   vstart=0
       mov ebx, msg_test_call_gate
       call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
 
+ .create_tcb:
+      
+ 
+ 
  ;ds=用户程序头部段
  .enter_user_program:
       mov esi, user_program_start_sector
