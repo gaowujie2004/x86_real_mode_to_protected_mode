@@ -659,7 +659,7 @@ SECTION core_code   vstart=0
       mov edi, salt
       mov ecx, salt_item_count
    .for_to_gate:                                ;为每个条目安装门描述符
-      mov edx, ecx                              ;暂存ecx的值，比使用栈内存暂存，快一些
+      push ecx                                  ;暂存ecx
 
       mov eax, [edi+256]                        ;公共函数（目标代码）段内偏移量
       mov bx, [edi+260]                         ;公共函数（目标代码）段选择子
@@ -669,14 +669,15 @@ SECTION core_code   vstart=0
                                                 ;将调用门描述符安装到GDT
       mov [edi+260], cx                         ;回填调用门描述符选择子
 
-      mov ecx, edx 
+      pop ecx
       add edi, salt_item_size
       loop .for_to_gate
  
- .test_call_gate:
+   .test_call_gate:
       mov ebx, msg_test_call_gate
       call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
 
+ ;ds=用户程序头部段
  .enter_user_program:
       mov esi, user_program_start_sector
       call load_relocate_user_program
@@ -685,6 +686,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:put_string
       
       mov [esp_pointer], esp
+      ;ds=用户程序头部段
       mov ds, ax                                ;load_relocate_user_program的返回值，用户程序头部段选择子
 
       jmp far [0x08]                            ;间接远转移（必须指明far），因为这是32位保护模式，所以用的是段选择子。
