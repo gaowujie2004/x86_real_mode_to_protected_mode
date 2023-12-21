@@ -631,7 +631,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:make_gdt_descriptor
 
       mov ebx, esi
-      call fill_descriptor_in_ldt
+      call install_ldt_descriptor
       or cx, 0B00000000_00000_011               ;RPL=3
       mov [edi+0x04], cx                        ;文件头大小字段以后是该段的选择子
       mov [esi+0x044],cx                        ;tcb登记程序头部选择子
@@ -645,7 +645,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:make_gdt_descriptor
 
       mov ebx, esi                              ;tcb起始线性地址
-      call fill_descriptor_in_ldt
+      call install_ldt_descriptor
       or cx, 0B00000000_00000_011               ;RPL=3
       mov [edi+0x0c], cx                        ;登记代码段选择子到用户程序头部
 
@@ -659,7 +659,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:make_gdt_descriptor
 
       mov ebx, esi                              ;tcb起始线性地址
-      call fill_descriptor_in_ldt
+      call install_ldt_descriptor
       or cx, 0B00000000_00000_011               ;RPL=3
       mov [edi+0x14], cx                        ;登记数据段到用户程序头部
 
@@ -672,7 +672,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:make_gdt_descriptor
 
       mov ebx, esi                              ;tcb起始线性地址
-      call fill_descriptor_in_ldt
+      call install_ldt_descriptor
       or cx, 0B00000000_00000_011  
       mov [edi+0x1c], cx                        ;登记栈段选择子到用户程序头部
 
