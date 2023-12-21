@@ -691,7 +691,7 @@ SECTION core_code   vstart=0
       mov esi, salt                             ;c-salt偏移量       
       cld
    ;es:edi <- ds:esi                      
-   ;es=user_head、edi=u-salt表起始偏移量 
+   ;es=4GB、edi=u-salt表起始偏移量 
    ;ds=core_data、esi=c-salt表起始偏移量
    ;1.因为是修改用户程序中的salt表，u-salt是外围循环
    @for_user_salt:                              ;TODO-Think：想了好久
