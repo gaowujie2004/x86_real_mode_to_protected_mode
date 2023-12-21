@@ -404,8 +404,6 @@ SECTION sys_routine vstart=0
       pop ds
       retf
 
- terminateUserProgram:                          ;结束用户程序，控制进入内核
-      retf
 ;============================== sys_routine END =====================================
 
 
