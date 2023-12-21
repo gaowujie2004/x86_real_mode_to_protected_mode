@@ -210,10 +210,29 @@ SECTION sys_routine vstart=0
       pop ebx
       retf
 
+ make_gate_descriptor:                          ;生成一个64位门描述符
+                                                ;输入：EAX=目标代码段32位偏移地址
+                                                ;      BX=目标代码段选择子
+                                                ;      CX=门描述符属性
+                                                ;返回：EDX(h32):EAX(l32)
+      push ebx 
 
- install_gdt_descriptor:                        ;将一个64位描述符安装到GDT中
+   .make_h32:
+      mov edx, eax
+      mov dx, cx 
+
+   .make_l32:
+      and eax, 0x0000_ffff                      ;eax高16位已经由edx存储
+      shl ebx, 16
+      or eax, ebx
+   
+   .ref:
+      pop ebx
+      retf
+ 
+ install_gdt_descriptor:                        ;将64位描述符安装到GDT中
                                                 ;输入：EDX(h32):EAX(l32)=描述符
-                                                ;输出：CX=当前描述符选择子
+                                                ;输出：CX=当前描述符选择子， TI=0、RPL=00
       push ebx
       push ds
       push es 
@@ -442,6 +461,8 @@ SECTION core_data   vstart=0
       msg_load_relocate_ok    db 0x0d,0x0a, 'User program load relocate success', 0
       msg_start_user_program  db 0x0d,0x0a, 'Start enter User program..........', 0
 
+      msg_test_call_gate      db 0x0d,0x0a, 'In core, test call gate...........', 0
+
       cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a, 0x20,0x20,0x20,0x20, 0
       cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
 ;============================== core_data END =======================================
@@ -600,7 +621,6 @@ SECTION core_code   vstart=0
  start:
       call sys_routine_seg_sel:clear
 
-      ;ds=core_data
       mov ax, core_data_seg_sel
       mov ds, ax
 
@@ -634,6 +654,28 @@ SECTION core_code   vstart=0
 
       mov ebx, cpu_brand
       call sys_routine_seg_sel:put_string
+
+ .public_func_call_game:                        ;不同特权级之间进行控制转移，可以通过调用门来完成
+      mov edi, salt
+      mov ecx, salt_item_count
+   .for_to_gate:                                ;为每个条目安装门描述符
+      mov edx, ecx                              ;暂存ecx的值，比使用栈内存暂存，快一些
+
+      mov eax, [edi+256]                        ;公共函数（目标代码）段内偏移量
+      mov bx, [edi+260]                         ;公共函数（目标代码）段选择子
+      mov cx, 0B1_11_0_1100_000_00000           ;调用门描述符属性，DPL=3，要求（CPL&&RPL <= 门描述符DPL) && CPL >= 目标代码段描述符DPL
+      call sys_routine_seg_sel:make_gate_descriptor
+      call sys_routine_seg_sel:install_gdt_descriptor
+                                                ;将调用门描述符安装到GDT
+      mov [edi+260], cx                         ;回填调用门描述符选择子
+
+      mov ecx, edx 
+      add edi, salt_item_size
+      loop .for_to_gate
+ 
+ .test_call_gate:
+      mov ebx, msg_test_call_gate
+      call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
 
  .enter_user_program:
       mov esi, user_program_start_sector
