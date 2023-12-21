@@ -423,46 +423,7 @@ SECTION sys_routine vstart=0
       pop ds
       retf
 
- append_tcb:                                    ;添加tcb到tcb链表尾部
-                                                ;输入：ECX=tcb起始线性地址
-      push ds
-      push es
-      push eax
-      push ebx
 
-   ;ds=core_data、es=4GB
-   .seg:
-      mov ax, core_data_seg_sel
-      mov ds, ax
-      mov ax, all_data_seg_sel
-      mov es, ax
-
-   .new_node_next_clear:
-      mov dword [es:ecx+0x00], 0                ;因为是线性地址，所以使用es（0-4gb)段
-
-   .is_empty:
-      mov eax, [tcb_head]
-      or eax, eax
-      jz .empty
-   
-   .find_last:
-      mov ebx, eax                              ;暂存eax（当前节点地址）
-      mov eax, [es:ebx+0x00]                    ;第一个节点的.next的值
-      or eax, eax
-      jnz .find_last
-
-   .set_last_node:
-      mov [es:ebx+0x00], ecx                    ;最后一个tcb的起始线性地址
-      jmp .ref
-
-   .empty:
-      mov [tcb_head], ecx
-
-   .ref:
-      pop ebx
-      pop eax
-      pop es
-      pop ds
 
 
 
@@ -515,6 +476,46 @@ SECTION core_data   vstart=0
 
 ;============================== core_code STR =================================
 SECTION core_code   vstart=0
+ append_tcb:                                    ;添加tcb到tcb链表尾部
+                                                ;输入：ECX=tcb起始线性地址
+      push ds
+      push es
+      push eax
+      push ebx
+
+   ;ds=core_data、es=4GB
+   .seg:
+      mov ax, core_data_seg_sel
+      mov ds, ax
+      mov ax, all_data_seg_sel
+      mov es, ax
+
+   .new_node_next_clear:
+      mov dword [es:ecx+0x00], 0                ;因为是线性地址，所以使用es（0-4gb)段
+
+   .is_empty:
+      mov eax, [tcb_head]
+      or eax, eax
+      jz .empty
+   
+   .find_last:
+      mov ebx, eax                              ;暂存eax（当前节点地址）
+      mov eax, [es:ebx+0x00]                    ;第一个节点的.next的值
+      or eax, eax
+      jnz .find_last
+
+   .set_last_node:
+      mov [es:ebx+0x00], ecx                    ;最后一个tcb的起始线性地址
+      jmp .ref
+
+   .empty:
+      mov [tcb_head], ecx
+
+   .ref:
+      pop ebx
+      pop eax
+      pop es
+      pop ds
  install_ldt_descriptor:                        ;在ldt中安装一个描述符
                                                 ;输入：EDX(h32):EAX(l32)=64位段描述符
                                                 ;      EBX=tcb起始线性地址
@@ -799,7 +800,7 @@ SECTION core_code   vstart=0
  .create_tcb:
       mov ecx, 0x46                             ;tcb size
       call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
-      call sys_routine_seg_sel:append_tcb
+      call append_tcb
 
  ;ds=用户程序头部段
  .enter_user_program:
