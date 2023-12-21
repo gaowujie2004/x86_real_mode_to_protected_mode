@@ -620,7 +620,7 @@ SECTION core_code   vstart=0
 
    
    
-   .setup_user_program_descriptor:              ;DS=4GB、EDI=用户程序起始线性地址、ESI=tcb起始线性地址
+   .setup_user_program_descriptor:              ;DS=4GB、EDI=用户程序起始线性地址（将被修改）、ESI=tcb起始线性地址
       pop edi                                   ;用户程序分配的内存（线性地址）    toA          
 
       ;文件头段描述符
@@ -677,15 +677,16 @@ SECTION core_code   vstart=0
       mov [edi+0x1c], cx                        ;登记栈段选择子到用户程序头部
 
 
-   ;重定位用户符号地址
-   .salt_relocate:
-      mov ax, [edi+0x04]                        ;用户程序头部段选择子
-      mov es, ax
+   
+   .salt_relocate:                              ;重定位用户符号地址，ES=4GB、DS=core_data、EDI=用户程序起始线性地址
+      ; mov ax, [edi+0x04]                      ;用户程序头部段选择子，LDT还没有生效，只能先使用4GB段
+      ; mov es, ax                             
+
       mov ax, core_data_seg_sel
       mov ds, ax
       
-      mov ecx, [es:0x24]
-      mov edi, 0x28                             ;u-salt偏移量
+      mov ecx, [es:edi+0x24]                    ;u-salt条目个数
+      add edi, 0x28                             ;u-salt偏移量
       mov esi, salt                             ;c-salt偏移量       
       cld
    ;es:edi <- ds:esi                      
@@ -713,6 +714,7 @@ SECTION core_code   vstart=0
             mov [es:edi-256], eax
 
             mov ax, [esi+0x04]                  ;c-salt item公共函数的段选择子
+            or ax, 0B00000000_00000_0_11        ;RPL==用户程序特权级CPL==3，以用户程序自己的特权级使用调用门
             mov [es:edi-252], ax
          @for_core_salt_continue:
             pop esi
@@ -783,6 +785,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:make_gate_descriptor
       call sys_routine_seg_sel:install_gdt_descriptor
                                                 ;将调用门描述符安装到GDT
+                        
       mov [edi+260], cx                         ;回填调用门描述符选择子
 
       pop ecx
