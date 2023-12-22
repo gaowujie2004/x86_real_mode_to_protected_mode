@@ -569,8 +569,7 @@ SECTION core_code   vstart=0
       ;ebp+11*4 = tcb起始线性地址
       ;ebp+12*4 = 用户程序起始LBA
 
-   ;esi=tcb起始线性地址
-   ;tcb起始线性地址
+      ;esi=tcb起始线性地址
       mov esi, [ss:ebp+11*4]  
 
    .ldt:             
@@ -927,6 +926,7 @@ SECTION core_code   vstart=0
  .enter_user_program:
       push dword 50
       push ecx                                  ;ecx=分配内存的起始线性地址、也等于当前tcb起始线性地址
+      xchg bx, bx
       call load_relocate_user_program
 
       mov ebx, msg_load_relocate_ok
