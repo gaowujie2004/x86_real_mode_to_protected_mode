@@ -793,7 +793,7 @@ SECTION core_code   vstart=0
 
    .ldt_to_gdt:                                 ;安装LDT(整个表)到GDT中，因为LDT也是个内存段
       mov eax, [es:esi+0x0c]                    ;LDT起始线性地址
-      movzx ebx, [es:esi+0x0a]                  ;LDT长度-1（整个表的长度-1）,LDT当前界限，最大64KB
+      movzx ebx, word [es:esi+0x0a]             ;LDT长度-1（整个表的长度-1）,LDT当前界限，最大64KB
       mov ecx, 0x0000_8200                      ;LDT的属性。TODO-Think：为什么DPL=0
       call sys_routine_seg_sel:make_seg_descriptor
       call sys_routine_seg_sel:install_gdt_descriptor ;CX=当前描述符选择子， TI=0、RPL=00
