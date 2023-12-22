@@ -578,7 +578,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
 
       ;放入tcb中
-      mov dword [es:esi+0x0c], esi              ;LDT起始线性地址
+      mov dword [es:esi+0x0c], ecx              ;LDT起始线性地址
       mov word [es:esi+0x0a], 0xffff            ;LDT段界限
                                                 ;与GDT格式完全一样
    .get_user_program_size:
