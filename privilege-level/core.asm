@@ -826,7 +826,7 @@ SECTION core_code   vstart=0
       mov ax, [ss:esi+0x3e]                     
       mov word [es:ecx+24], ax                  ;2特权级SS
 
-      mov [es:ecx+28], 0                        ;CR3，当前为开启分页，暂时为0
+      mov dword [es:ecx+28], 0                  ;CR3，当前为开启分页，暂时为0
 
       ;通用寄存器&段寄存器&ESP、ESI由CPU硬件自动存储
 
@@ -836,7 +836,7 @@ SECTION core_code   vstart=0
       mov ax, [es:esi+0x10]
       mov [es:ecx+96], ax                       ;LDT段选择子（在GDT中）
 
-      mov [es:ecx+100], 0x0067_0000             ;T=0、I/O映射基地址=0x0067=103（无IO许可位）
+      mov dword [es:ecx+100], 0x0067_0000       ;T=0、I/O映射基地址=0x0067=103（无IO许可位）
 
    .tss_to_gdt:
       mov eax, [es:esi+0x14]                    ;TSS起始线性地址
@@ -932,8 +932,13 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:put_string
       
       mov [esp_pointer], esp
-      ;ds=用户程序头部段
-      mov ds, ax                                ;load_relocate_user_program的返回值，用户程序头部段选择子
+
+      mov ax, all_data_seg_sel
+      mov ds, ax
+      ;ds切换到用户程序头部段
+      ;ds=用户程序头部段、ECX=TCB起始线性地址
+      mov ds, [es:ecx+0x44]     
+
 
       jmp far [0x08]                            ;间接远转移（必须指明far），因为这是32位保护模式，所以用的是段选择子。
 
