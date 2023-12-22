@@ -550,8 +550,7 @@ SECTION core_code   vstart=0
       pop esi
       pop ds
       ret
-
-
+ ;------------------------------------------------------------
  load_relocate_user_program:                    ;加载重定位用户程序，通过栈传递参数
                                                 ;输入：push 用户程序起始逻辑扇区号
                                                 ;      push 当前tcb起始线性地址
