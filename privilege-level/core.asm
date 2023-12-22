@@ -730,7 +730,7 @@ SECTION core_code   vstart=0
       add edi, 256
       loop @for_user_salt
    
-   ;DS=core_data、ES=4GB、ESI=tcb起始线性地址
+   ;DS=core_data、ES=4GB、ESI=TCB起始线性地址
    .create_PL_stack:                            ;创建不同特权级的栈段，放在LDT中
       mov esi, [ss:ebp+11*4]                    ;tcb起始线性地址
       
