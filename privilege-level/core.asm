@@ -845,7 +845,7 @@ SECTION core_code   vstart=0
       mov ecx, 0x0000_8900                      ;TSS内存段描述符属性
                                                 ;P DPL S=1000 \ TYPE=1001，B位=0
       call sys_routine_seg_sel:make_seg_descriptor
-      call install_gdt_descriptor
+      call sys_routine_seg_sel:install_gdt_descriptor
       mov [es:esi+0x18], cx                     ;登记TSS选择子到TCB，PRL=00， CPL&RPL <=0 才能访问该数据段。
                                                 ;TODO-Tips：从这里也能看出，RPL是由操作系统控制的，CPU只负责检查RPL与CPL的合法性，不负责鉴别PRL的真实性，真实性由操作系统鉴别。
       
