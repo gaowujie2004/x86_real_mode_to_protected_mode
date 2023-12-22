@@ -741,7 +741,7 @@ SECTION core_code   vstart=0
       push ecx
       call sys_routine_seg_sel:allocate_memory  ;输入ecx（希望分配字节数）、输出ecx（分配内存的起始线性地址）
       mov [es:esi+0x1e], ecx                    ;0特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
-     
+      ;栈内存段在LDT中安装
       mov eax, ecx                              ;栈内存基地址
       mov ebx, [es:esi+0x1a]                    ;段界限
       mov ecx, 0x00c0_9200                      ;DPL=0
@@ -761,7 +761,7 @@ SECTION core_code   vstart=0
       push ecx
       call sys_routine_seg_sel:allocate_memory  ;输入ecx（希望分配字节数）、输出ecx（分配内存的起始线性地址）
       mov [es:esi+0x2c], ecx                    ;1特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
-     
+      ;栈内存段在LDT中安装
       mov eax, ecx                              ;栈段基地址
       mov ebx, [es:esi+0x28]                    ;段界限
       mov ecx, 0x00c0_b200                      ;DPL=1
@@ -780,7 +780,7 @@ SECTION core_code   vstart=0
       push ecx
       call sys_routine_seg_sel:allocate_memory  ;输入ecx（希望分配字节数）、输出ecx（分配内存的起始线性地址）
       mov [es:esi+0x3a], ecx                    ;1特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
-     
+      ;栈内存段在LDT中安装
       mov eax, ecx                              ;栈段基地址
       mov ebx, [es:esi+0x36]                    ;段界限
       mov ecx, 0x00c0_d200                      ;DPL=2
