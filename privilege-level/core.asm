@@ -517,6 +517,8 @@ SECTION core_code   vstart=0
       pop eax
       pop es
       pop ds
+      ret
+ ;------------------------------------------------------------
  install_ldt_descriptor:                        ;在ldt中安装一个描述符
                                                 ;输入：EDX(h32):EAX(l32)=64位段描述符
                                                 ;      EBX=tcb起始线性地址
@@ -918,6 +920,7 @@ SECTION core_code   vstart=0
       call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
 
  .create_tcb:
+      xchg bx, bx
       mov ecx, 0x46                             ;tcb size
       call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
       call append_tcb
