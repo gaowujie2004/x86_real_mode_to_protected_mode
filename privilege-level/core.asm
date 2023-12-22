@@ -432,7 +432,8 @@ SECTION sys_routine vstart=0
 
 ;============================== core_data STR ================================
 SECTION core_data   vstart=0
-      pgdt        dd 0x0000_0000                ;暂存GDTR的数据，低两位是界限
+      pgdt        dw 0x0000                     ;GDT界限=长度-1
+                  dd 0x0000_0000                ;GDT起始线性地址
 
       ram_alloc   dd 0x0010_0000                ;用户程序动态内存分配起始线性地址（未开启分页就是物理地址）
 
