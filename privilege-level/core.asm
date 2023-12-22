@@ -728,6 +728,69 @@ SECTION core_code   vstart=0
       pop edi
       add edi, 256
       loop @for_user_salt
+   
+   ;DS=core_data、ES=4GB、ESI=tcb起始线性地址
+   .create_PL_stack:                            ;创建不同特权级的栈段，放在LDT中
+      mov esi, [ss:ebp+11*4]                    ;tcb起始线性地址
+      
+      ;创建0特权级栈_4kb长度
+      mov ecx, 0
+      mov [es:esi+0x1a], ecx                    ;段界限，实际长度是0+1
+      inc ecx
+      shl ecx, 12                               ;栈实际所占字节数(4KB对齐)
+      push ecx
+      call sys_routine_seg_sel:allocate_memory  ;输入ecx（希望分配字节数）、输出ecx（分配内存的起始线性地址）
+      mov [es:esi+0x1e], ecx                    ;0特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
+     
+      mov eax, ecx                              ;栈内存基地址
+      mov ebx, [es:esi+0x1a]                    ;段界限
+      mov ecx, 0x00c0_9200                      ;DPL=0
+      call sys_routine_seg_sel:make_gdt_descriptor
+      mov ebx, esi
+      call install_ldt_descriptor               ;栈段描述符在LDT中的选择子
+      and cx, 0B11111111_11111_1_00             ;RPL=00，默认就是00，这行代码可以忽略， CPL==0，CPL要与栈特权级时时刻刻相同
+      mov [es:esi+0x22], cx                     ;0特权级栈选择子（在LDT中）
+      pop dword [es:esi+0x24]                   ;长度（所占字节数）
+
+
+      ;创建1特权级栈，CPL==RPL==栈段DPL
+      mov ecx, 0
+      mov [es:esi+0x28], ecx                    ;段界限，实际长度是0+1
+      inc ecx
+      shl ecx, 12                               ;栈实际所占字节数(4KB对齐)
+      push ecx
+      call sys_routine_seg_sel:allocate_memory  ;输入ecx（希望分配字节数）、输出ecx（分配内存的起始线性地址）
+      mov [es:esi+0x2c], ecx                    ;1特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
+     
+      mov eax, ecx                              ;栈段基地址
+      mov ebx, [es:esi+0x28]                    ;段界限
+      mov ecx, 0x00c0_b200                      ;DPL=1
+      call sys_routine_seg_sel:make_gdt_descriptor
+      mov ebx, esi
+      call install_ldt_descriptor               ;栈段描述符在LDT中的选择子
+      or cx, 0B00000000_00000_0_01              ;RPL=01，默认00
+      mov [es:esi+0x30], cx                     ;1特权级栈选择子（在LDT中）
+      pop dword [es:esi+0x32]                   ;长度（所占字节数）
+
+      ;创建2特权级栈，CPL==RPL==栈段DPL
+      mov ecx, 0
+      mov [es:esi+0x36], ecx                    ;段界限，实际长度是0+1
+      inc ecx
+      shl ecx, 12                               ;栈实际所占字节数(4KB对齐)
+      push ecx
+      call sys_routine_seg_sel:allocate_memory  ;输入ecx（希望分配字节数）、输出ecx（分配内存的起始线性地址）
+      mov [es:esi+0x3a], ecx                    ;1特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
+     
+      mov eax, ecx                              ;栈段基地址
+      mov ebx, [es:esi+0x36]                    ;段界限
+      mov ecx, 0x00c0_d200                      ;DPL=2
+      call sys_routine_seg_sel:make_gdt_descriptor
+      mov ebx, esi
+      call install_ldt_descriptor               ;栈段描述符在LDT中的选择子
+      or cx, 0B00000000_00000_0_10              ;RPL=02，默认00
+      mov [es:esi+0x3e], cx                     ;2特权级栈选择子（在LDT中）
+      pop dword [es:esi+0x40]                   ;长度（所占字节数）
+
 
    .return:
       pop es
