@@ -828,7 +828,7 @@ SECTION core_code   vstart=0
 
       mov eax, [es:esi+0x40]                    
       mov dword [es:ecx+20], eax                ;2特权级ESP
-      
+
       mov ax, [es:esi+0x3e]                     
       mov word [es:ecx+24], ax                  ;2特权级SS
 
