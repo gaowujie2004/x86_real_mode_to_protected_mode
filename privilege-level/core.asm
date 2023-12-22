@@ -810,21 +810,21 @@ SECTION core_code   vstart=0
       mov [es:esi+0x14], ecx                    ;登记到TCB，TSS起始线性地址
 
       ;初始化TSS各个字段
-      mov dword [es:ecx+0x00], 0                ;前一个任务的TSS段选择子
+      mov word [es:ecx+0x00], 0                 ;前一个任务的TSS段选择子
 
       mov eax, [es:esi+0x24]                    
       mov dword [es:ecx+4], eax                 ;0特权级ESP
-      mov ax, [ss:esi+0x22]                     
+      mov ax, [es:esi+0x22]                     
       mov word [es:ecx+8], ax                   ;0特权级SS
 
       mov eax, [es:esi+0x32]                    
       mov dword [es:ecx+12], eax                ;1特权级ESP
-      mov ax, [ss:esi+0x30]                     
+      mov ax, [es:esi+0x30]                     
       mov word [es:ecx+16], ax                  ;1特权级SS
 
       mov eax, [es:esi+0x40]                    
       mov dword [es:ecx+20], eax                ;2特权级ESP
-      mov ax, [ss:esi+0x3e]                     
+      mov ax, [es:esi+0x3e]                     
       mov word [es:ecx+24], ax                  ;2特权级SS
 
       mov dword [es:ecx+28], 0                  ;CR3，当前为开启分页，暂时为0
