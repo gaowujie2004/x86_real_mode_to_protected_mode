@@ -466,6 +466,7 @@ SECTION core_data   vstart=0
       msg_enter_core          db            'Core enter success................', 0
       msg_load_relocate_ok    db 0x0d,0x0a, 'User program load relocate success', 0
       msg_start_user_program  db 0x0d,0x0a, 'Start enter User program..........', 0
+      msg_again_enter_core    db 0x0d,0x0a, 'Core enter success................', 0       
 
       msg_test_call_gate      db 0x0d,0x0a, 'In core, test call gate...........', 0
 
@@ -931,16 +932,28 @@ SECTION core_code   vstart=0
       mov ebx, msg_load_relocate_ok
       call sys_routine_seg_sel:put_string
       
-      mov [esp_pointer], esp
+      mov [esp_pointer], esp                    ;TODO-Todo：还需要吗？
 
+      ;DS=4GB、ECX=TCB起始线性地址
       mov ax, all_data_seg_sel
       mov ds, ax
-      ;ds切换到用户程序头部段
-      ;ds=用户程序头部段、ECX=TCB起始线性地址
-      mov ds, [es:ecx+0x44]     
 
+   .load_tts_ldt:
+      lldt [ecx+0x10]                           ;LDT选择子，和lgdt不一样，lgdt是加载GDT起始线性地址、界限； 
+                                                ;而lldt是加载选择子道ldtr的选择器部分，然后根据选择子在GDT中查找LDT描述符，最后载入LDTR描述符高速缓冲器
+      ltr  [ecx+0x18]                           ;TSS选择子，和lldt过程类似
 
-      jmp far [0x08]                            ;间接远转移（必须指明far），因为这是32位保护模式，所以用的是段选择子。
+   ;DS切换到用户程序头部段
+   ;DS=用户程序头部段、ECX=TCB起始线性地址
+   .make_gate_return:
+      mov ds, [ecx+0x44]
+      push dword [0x1c]
+      push dword [0x20]                         ;向上扩展的栈段
+
+      push dword [0x0c]                         ;调用者（用户程序）CS
+      push dword [0x08]                         ;调用者（用户程序）EIP
+
+      retf                                      ;远过程调用
 
  return_pointer:
       mov ax, core_data_seg_sel
@@ -950,7 +963,7 @@ SECTION core_code   vstart=0
       mov ss, ax
       mov esp, [esp_pointer]
 
-      mov ebx, msg_enter_core
+      mov ebx, msg_again_enter_core
       call sys_routine_seg_sel:put_string
  
       ;可以继续执行其他程序
