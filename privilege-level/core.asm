@@ -175,7 +175,7 @@ SECTION sys_routine vstart=0
       pop ecx
       retf
 
- make_gdt_descriptor:                           ;生成一个64位全局描述符表的描述符
+ make_seg_descriptor:                           ;生成一个64位全局描述符表的描述符
                                                 ;输入：EAX=线性基地址
                                                 ;      EBX=段界限
                                                 ;      ECX=属性（各属性位都在原始
@@ -629,7 +629,7 @@ SECTION core_code   vstart=0
       mov ebx, [edi+0x04]                       
       dec ebx                                   ;段界限
       mov ecx, 0x0040_f200                      ;数据段属性; G DB L AVL=0100、段界限=0 | P DPL S=1_11_1、TYPE=0010；TODO-Tips：DPL=3
-      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:make_seg_descriptor
 
       mov ebx, esi
       call install_ldt_descriptor
@@ -643,7 +643,7 @@ SECTION core_code   vstart=0
       mov ebx, [edi+0x10]                       
       dec ebx                                   ;段界限
       mov ecx, 0x0040_f800                      ;代码段属性；G DB L AVL=0100、段界限=0 | P DPL S=1_11_1、TYPE=1000（只执行）；TODO-Tips：DPL=3
-      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:make_seg_descriptor
 
       mov ebx, esi                              ;tcb起始线性地址
       call install_ldt_descriptor
@@ -657,7 +657,7 @@ SECTION core_code   vstart=0
       mov ebx, [edi+0x18]                       
       dec ebx                                   ;段界限
       mov ecx, 0x0040_f200                      ;数据段属性；G DB L AVL=0100、段界限=0 | P DPL S=1111、TYPE=0010（可读可写）
-      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:make_seg_descriptor
 
       mov ebx, esi                              ;tcb起始线性地址
       call install_ldt_descriptor
@@ -670,7 +670,7 @@ SECTION core_code   vstart=0
       mov ebx, [edi+0x20]                       
       dec ebx                                   ;段界限
       mov ecx, 0x0040_f200                      ;栈段属性；G DB L AVL=0100、段界限=0 | P DPL S=1111、TYPE=0010（可读可写）
-      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:make_seg_descriptor
 
       mov ebx, esi                              ;tcb起始线性地址
       call install_ldt_descriptor
@@ -745,7 +745,7 @@ SECTION core_code   vstart=0
       mov eax, ecx                              ;栈内存基地址
       mov ebx, [es:esi+0x1a]                    ;段界限
       mov ecx, 0x00c0_9200                      ;DPL=0
-      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:make_seg_descriptor
       mov ebx, esi
       call install_ldt_descriptor               ;栈段描述符在LDT中的选择子
       and cx, 0B11111111_11111_1_00             ;RPL=00，默认就是00，这行代码可以忽略， CPL==0，CPL要与栈特权级时时刻刻相同
@@ -765,7 +765,7 @@ SECTION core_code   vstart=0
       mov eax, ecx                              ;栈段基地址
       mov ebx, [es:esi+0x28]                    ;段界限
       mov ecx, 0x00c0_b200                      ;DPL=1
-      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:make_seg_descriptor
       mov ebx, esi
       call install_ldt_descriptor               ;栈段描述符在LDT中的选择子
       or cx, 0B00000000_00000_0_01              ;RPL=01，默认00
@@ -784,7 +784,7 @@ SECTION core_code   vstart=0
       mov eax, ecx                              ;栈段基地址
       mov ebx, [es:esi+0x36]                    ;段界限
       mov ecx, 0x00c0_d200                      ;DPL=2
-      call sys_routine_seg_sel:make_gdt_descriptor
+      call sys_routine_seg_sel:make_seg_descriptor
       mov ebx, esi
       call install_ldt_descriptor               ;栈段描述符在LDT中的选择子
       or cx, 0B00000000_00000_0_10              ;RPL=02，默认00
