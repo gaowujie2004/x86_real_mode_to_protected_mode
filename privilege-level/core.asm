@@ -837,7 +837,7 @@ SECTION core_code   vstart=0
       mov [es:ecx+96], ax                       ;LDT段选择子（在GDT中）
 
       mov [es:ecx+100], 0x0067_0000             ;T=0、I/O映射基地址=0x0067=103（无IO许可位）
-      
+
    .tss_to_gdt:
       mov eax, [es:esi+0x14]                    ;TSS起始线性地址
       movzx ebx, word [es:esi+0x12]             ;段界限
@@ -853,7 +853,7 @@ SECTION core_code   vstart=0
       pop es
       pop ds
       popad
-      ret
+      ret 8                                     ;过程的编写者最清楚栈中有几个参数，丢弃8byte的参数，即过程返回到调用本函数的下一条指令后，ESP <- ESP+8
  ;------------------------------------------------------------
  
  ;ds=core_data
