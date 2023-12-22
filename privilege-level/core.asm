@@ -799,6 +799,54 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:install_gdt_descriptor ;CX=当前描述符选择子， TI=0、RPL=00
       mov [es:esi+0x10], cx                     ;回填到tcb，LDT在GDT中的选择子
 
+   .create_tss:                                 ;创建当前任务的tss
+      ;创建并将TSS登记到TCB中
+      mov ecx, 104                              ;TSS基准尺寸
+      dec ecx
+      mov [es:esi+0x12], cx                     ;登记到TCB，TSS段界限（16位）
+      inc ecx
+      call sys_routine_seg_sel:allocate_memory
+      mov [es:esi+0x14], ecx                    ;登记到TCB，TSS起始线性地址
+
+      ;初始化TSS各个字段
+      mov dword [es:ecx+0x00], 0                ;前一个任务的TSS段选择子
+
+      mov eax, [es:esi+0x24]                    
+      mov dword [es:ecx+4], eax                 ;0特权级ESP
+      mov ax, [ss:esi+0x22]                     
+      mov word [es:ecx+8], ax                   ;0特权级SS
+
+      mov eax, [es:esi+0x32]                    
+      mov dword [es:ecx+12], eax                ;1特权级ESP
+      mov ax, [ss:esi+0x30]                     
+      mov word [es:ecx+16], ax                  ;1特权级SS
+
+      mov eax, [es:esi+0x40]                    
+      mov dword [es:ecx+20], eax                ;2特权级ESP
+      mov ax, [ss:esi+0x3e]                     
+      mov word [es:ecx+24], ax                  ;2特权级SS
+
+      mov [es:ecx+28], 0                        ;CR3，当前为开启分页，暂时为0
+
+      ;通用寄存器&段寄存器&ESP、ESI由CPU硬件自动存储
+
+      ;TODO-Todo：标志寄存器的 IOPL、TI(中断屏蔽) 不设置了吗？
+      ;当 CPL > IOPL时，不允许执行 popf、iret，否则触发中断；可以执行 cli sti，但没有任何效果
+
+      mov ax, [es:esi+0x10]
+      mov [es:ecx+96], ax                       ;LDT段选择子（在GDT中）
+
+      mov [es:ecx+100], 0x0067_0000             ;T=0、I/O映射基地址=0x0067=103（无IO许可位）
+      
+   .tss_to_gdt:
+      mov eax, [es:esi+0x14]                    ;TSS起始线性地址
+      movzx ebx, word [es:esi+0x12]             ;段界限
+      mov ecx, 0x0000_8900                      ;TSS内存段描述符属性
+                                                ;P DPL S=1000 \ TYPE=1001，B位=0
+      call sys_routine_seg_sel:make_seg_descriptor
+      call install_gdt_descriptor
+      mov [es:esi+0x18], cx                     ;登记TSS选择子到TCB，PRL=00， CPL&RPL <=0 才能访问该数据段。
+                                                ;TODO-Tips：从这里也能看出，RPL是由操作系统控制的，CPU只负责检查RPL与CPL的合法性，不负责鉴别PRL的真实性，真实性由操作系统鉴别。
       
 
    .return:
