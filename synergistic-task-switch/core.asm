@@ -874,7 +874,7 @@ SECTION core_code   vstart=0
       ret 8                                     ;过程的编写者最清楚栈中有几个参数，丢弃8byte的参数，即过程返回到调用本函数的下一条指令后，ESP <- ESP+8
  ;------------------------------------------------------------
  
- ;ds=core_data
+ ;DS=core_data、ES=4GB
  start:
       call sys_routine_seg_sel:clear
 
