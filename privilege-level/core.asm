@@ -292,6 +292,16 @@ SECTION sys_routine vstart=0
       push edx
       push ecx
       push ebx
+      push ebp
+
+
+   .chech_RPL:
+      mov ebp, esp
+      mov cx, ds
+      mov dx, [ss:ebp+6*4]                      ;调用者CS
+      arpl cx, dx                               ;调整ds
+      mov ds, cx
+
 
       mov ecx, eax                              ;暂存eax
 
@@ -348,6 +358,7 @@ SECTION sys_routine vstart=0
   .error:                                       ;TODO-Todo：代办项，加载内核时，对错误打印。
 
   .return:
+      pop ebp
       pop ebx
       pop ecx
       pop edx 
