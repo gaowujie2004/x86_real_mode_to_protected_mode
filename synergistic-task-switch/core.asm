@@ -816,9 +816,9 @@ SECTION core_code   vstart=0
       mov ecx, 0x0000_8200                      ;LDT的属性。TODO-Think：为什么DPL=0
       call sys_routine_seg_sel:make_seg_descriptor
       call sys_routine_seg_sel:install_gdt_descriptor ;CX=当前描述符选择子， TI=0、RPL=00
-      mov [es:esi+0x10], cx                     ;回填到tcb，LDT在GDT中的选择子
+      mov [es:esi+0x10], cx                     ;回填到TCB，LDT在GDT中的选择子
 
-   .create_tss:                                 ;创建当前任务的tss
+   .create_tss:                                 ;创建当前任务的TSS
       ;创建并将TSS登记到TCB中
       mov ecx, 104                              ;TSS基准尺寸
       dec ecx
@@ -852,7 +852,9 @@ SECTION core_code   vstart=0
 
       mov dword [es:ecx+28], 0                  ;CR3，当前为开启分页，暂时为0
 
-      ;通用寄存器&段寄存器&ESP、ESI由CPU硬件自动存储
+      ;第一次切换任务时，通用寄存器的内容不重要。
+      ;以后【切换任务】时旧任务的各个状态会被CPU自动保存到旧任务的TSS中
+
 
       ;TODO-Todo：标志寄存器的 IOPL、TI(中断屏蔽) 不设置了吗？
       ;当 CPL > IOPL时，不允许执行 popf、iret，否则触发中断；可以执行 cli sti，但没有任何效果
