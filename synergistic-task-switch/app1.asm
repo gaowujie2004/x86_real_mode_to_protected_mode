@@ -27,7 +27,7 @@ SECTION header  vstart=0
       TerminateProgram  db '@terminateProgram',0
                         times 256-($-TerminateProgram) db 0
 
-      TaskSwitch        db '@TaskSwitch', 0
+      TaskSwitch        db '@taskSwitch', 0
                         times 256-($-TaskSwitch) db 0
       ;-----------------------------------------符号地址映射表
 
