@@ -641,7 +641,7 @@ SECTION core_code   vstart=0
 
    
    
-   .setup_user_program_descriptor:              ;DS=4GB、EDI=用户程序起始线性地址（将被修改）、ESI=tcb起始线性地址
+   .setup_user_program_descriptor:              ;DS=4GB、EDI=用户程序起始线性地址（将被修改）、ESI=TCB起始线性地址
       pop edi                                   ;用户程序分配的内存（线性地址）    toA          
 
       ;文件头段描述符
@@ -654,8 +654,8 @@ SECTION core_code   vstart=0
       mov ebx, esi
       call install_ldt_descriptor
       or cx, 0B00000000_00000_011               ;RPL=3
-      mov [edi+0x04], cx                        ;文件头大小字段以后是该段的选择子
-      mov [esi+0x044],cx                        ;tcb登记程序头部选择子
+      mov [edi+0x04], cx                        ;文件头大小字段以后=程序头部选择子
+      mov [esi+0x044],cx                        ;程序头部选择子，登记到TCB
 
       ;代码段描述符
       mov eax, edi
@@ -665,10 +665,10 @@ SECTION core_code   vstart=0
       mov ecx, 0x0040_f800                      ;代码段属性；G DB L AVL=0100、段界限=0 | P DPL S=1_11_1、TYPE=1000（只执行）；TODO-Tips：DPL=3
       call sys_routine_seg_sel:make_seg_descriptor
 
-      mov ebx, esi                              ;tcb起始线性地址
+      mov ebx, esi                              ;TCB起始线性地址
       call install_ldt_descriptor
       or cx, 0B00000000_00000_011               ;RPL=3
-      mov [edi+0x0c], cx                        ;登记代码段选择子到用户程序头部
+      mov [edi+0x0c], cx                        ;代码段选择子到用户程序头部相关字段
 
 
       ;数据段描述符
@@ -679,10 +679,10 @@ SECTION core_code   vstart=0
       mov ecx, 0x0040_f200                      ;数据段属性；G DB L AVL=0100、段界限=0 | P DPL S=1111、TYPE=0010（可读可写）
       call sys_routine_seg_sel:make_seg_descriptor
 
-      mov ebx, esi                              ;tcb起始线性地址
+      mov ebx, esi                              ;TCB起始线性地址
       call install_ldt_descriptor
       or cx, 0B00000000_00000_011               ;RPL=3
-      mov [edi+0x14], cx                        ;登记数据段到用户程序头部
+      mov [edi+0x14], cx                        ;数据段到用户程序头部相关字段
 
       ;栈段描述符
       mov eax, edi
@@ -692,11 +692,10 @@ SECTION core_code   vstart=0
       mov ecx, 0x0040_f200                      ;栈段属性；G DB L AVL=0100、段界限=0 | P DPL S=1111、TYPE=0010（可读可写）
       call sys_routine_seg_sel:make_seg_descriptor
 
-      mov ebx, esi                              ;tcb起始线性地址
+      mov ebx, esi                              ;TCB起始线性地址
       call install_ldt_descriptor
       or cx, 0B00000000_00000_011  
-      mov [edi+0x1c], cx                        ;登记栈段选择子到用户程序头部
-
+      mov [edi+0x1c], cx                        ;栈段选择子到用户程序头部相关字段
 
    
    .salt_relocate:                              ;重定位用户符号地址，ES=4GB、DS=core_data、EDI=用户程序起始线性地址
