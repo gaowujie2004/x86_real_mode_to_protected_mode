@@ -753,7 +753,7 @@ SECTION core_code   vstart=0
    .create_PL_stack:                            ;创建不同特权级的栈段，放在LDT中
       mov esi, [ss:ebp+11*4]                    ;tcb起始线性地址
       
-      ;创建0特权级栈_4kb长度
+      ;创建0特权级栈_4kb长度，并登记到TCB
       mov ecx, 0
       mov [es:esi+0x1a], ecx                    ;段界限，实际长度是0+1
       inc ecx
@@ -767,13 +767,13 @@ SECTION core_code   vstart=0
       mov ecx, 0x00c0_9200                      ;DPL=0
       call sys_routine_seg_sel:make_seg_descriptor
       mov ebx, esi
-      call install_ldt_descriptor               ;栈段描述符在LDT中的选择子
+      call install_ldt_descriptor               
       and cx, 0B11111111_11111_1_00             ;RPL=00，默认就是00，这行代码可以忽略， CPL==0，CPL要与栈特权级时时刻刻相同
       mov [es:esi+0x22], cx                     ;0特权级栈选择子（在LDT中）
       pop dword [es:esi+0x24]                   ;长度（所占字节数）
 
 
-      ;创建1特权级栈，CPL==RPL==栈段DPL
+      ;创建1特权级栈，CPL==RPL==栈段DPL，并登记到TCB
       mov ecx, 0
       mov [es:esi+0x28], ecx                    ;段界限，实际长度是0+1
       inc ecx
@@ -787,12 +787,12 @@ SECTION core_code   vstart=0
       mov ecx, 0x00c0_b200                      ;DPL=1
       call sys_routine_seg_sel:make_seg_descriptor
       mov ebx, esi
-      call install_ldt_descriptor               ;栈段描述符在LDT中的选择子
+      call install_ldt_descriptor
       or cx, 0B00000000_00000_0_01              ;RPL=01，默认00
       mov [es:esi+0x30], cx                     ;1特权级栈选择子（在LDT中）
       pop dword [es:esi+0x32]                   ;长度（所占字节数）
 
-      ;创建2特权级栈，CPL==RPL==栈段DPL
+      ;创建2特权级栈，CPL==RPL==栈段DPL，并登记到TCB
       mov ecx, 0
       mov [es:esi+0x36], ecx                    ;段界限，实际长度是0+1
       inc ecx
@@ -806,10 +806,10 @@ SECTION core_code   vstart=0
       mov ecx, 0x00c0_d200                      ;DPL=2
       call sys_routine_seg_sel:make_seg_descriptor
       mov ebx, esi
-      call install_ldt_descriptor               ;栈段描述符在LDT中的选择子
+      call install_ldt_descriptor
       or cx, 0B00000000_00000_0_10              ;RPL=02，默认00
-      mov [es:esi+0x3e], cx                     ;2特权级栈选择子（在LDT中）
-      pop dword [es:esi+0x40]                   ;长度（所占字节数）
+      mov [es:esi+0x3e], cx                     ;2特权级栈选择子（在LDT中）记录到TCB
+      pop dword [es:esi+0x40]                   ;长度（所占字节数）记录到TCB
 
    .ldt_to_gdt:                                 ;安装LDT(整个表)到GDT中，因为LDT也是个内存段
       mov eax, [es:esi+0x0c]                    ;LDT起始线性地址
