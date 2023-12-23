@@ -768,8 +768,8 @@ SECTION core_code   vstart=0
       mov ebx, esi
       call install_ldt_descriptor               
       and cx, 0B11111111_11111_1_00             ;RPL=00，默认就是00，这行代码可以忽略， CPL==0，CPL要与栈特权级时时刻刻相同
-      mov [es:esi+0x22], cx                     ;0特权级栈选择子（在LDT中）
-      pop dword [es:esi+0x24]                   ;长度（所占字节数）
+      mov [es:esi+0x22], cx                     ;0特权级栈选择子（在LDT中），登记到TCB
+      pop dword [es:esi+0x24]                   ;栈长度（所占字节数），登记到TCB
 
 
       ;创建1特权级栈，CPL==RPL==栈段DPL，并登记到TCB
@@ -788,8 +788,8 @@ SECTION core_code   vstart=0
       mov ebx, esi
       call install_ldt_descriptor
       or cx, 0B00000000_00000_0_01              ;RPL=01，默认00
-      mov [es:esi+0x30], cx                     ;1特权级栈选择子（在LDT中）
-      pop dword [es:esi+0x32]                   ;长度（所占字节数）
+      mov [es:esi+0x30], cx                     ;1特权级栈选择子（在LDT中），登记到TCB
+      pop dword [es:esi+0x32]                   ;栈长度（所占字节数），登记到TCB
 
       ;创建2特权级栈，CPL==RPL==栈段DPL，并登记到TCB
       mov ecx, 0
@@ -808,7 +808,7 @@ SECTION core_code   vstart=0
       call install_ldt_descriptor
       or cx, 0B00000000_00000_0_10              ;RPL=02，默认00
       mov [es:esi+0x3e], cx                     ;2特权级栈选择子（在LDT中）记录到TCB
-      pop dword [es:esi+0x40]                   ;长度（所占字节数）记录到TCB
+      pop dword [es:esi+0x40]                   ;栈长度（所占字节数）记录到TCB
 
    .ldt_to_gdt:                                 ;安装LDT(整个表)到GDT中，因为LDT也是个内存段
       mov eax, [es:esi+0x0c]                    ;LDT起始线性地址
@@ -854,6 +854,8 @@ SECTION core_code   vstart=0
 
       ;第一次切换任务时，通用寄存器的内容不重要。
       ;以后【切换任务】时旧任务的各个状态会被CPU自动保存到旧任务的TSS中
+
+      ;特权级栈必须登记到TSS
 
 
       ;TODO-Todo：标志寄存器的 IOPL、TI(中断屏蔽) 不设置了吗？
