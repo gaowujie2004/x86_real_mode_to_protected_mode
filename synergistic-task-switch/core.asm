@@ -1,3 +1,6 @@
+      ;任务：协同式任务切换。
+      ;首先要将操作系统内核也变为一个任务，那就得创建TSS。内核因为是和0特权级绑定在一起的，所以可以没有LDT，直接使用GDTＧＤＴ
+      
       video_card_index_port   equ     0x3d4                 ;显卡的功能索引寄存器端口
       video_card_data_port    equ     0x3d5                 ;显卡的数据寄存器端口
       cursor_h8_port          equ     0x0e                  ;光标寄存器索引端口，高8位
@@ -482,6 +485,8 @@ SECTION core_data   vstart=0
 
       msg_test_call_gate      db 0x0d,0x0a, 'In core, test call gate...........', 0
 
+      msg_core_tss_ok         db 0x0d,0x0a, '[Core Task]: core task runing CPL=0', 0
+
       cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a, 0x20,0x20,0x20,0x20, 0
       cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
 ;============================== core_data END =======================================
@@ -881,6 +886,9 @@ SECTION core_code   vstart=0
       mov ax, core_data_seg_sel
       mov ds, ax
 
+      mov ax, all_data_seg_sel
+      mov es, ax
+
       mov ebx, msg_enter_core
       call sys_routine_seg_sel:put_string
 
@@ -935,8 +943,51 @@ SECTION core_code   vstart=0
       mov ebx, msg_test_call_gate
       call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
 
- .create_tcb:
+ .create_core_tcb:
+      mov ecx, 0x46
+      call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TCB起始线性地址
+      call append_tcb                           ;输入：ECX
+      mov esi, ecx
+ ;ESI=TCB起始线性地址                              
+ .create_core_tss:
+      mov ecx, 103
+      mov [es:esi+0x12], ecx                    ;登记TSS界限到TCB
+      inc ecx                                   ;TSS长度
+      call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TSS起始线性地址
+      
+      mov [es:esi+0x14], ecx                    ;登记TSS基地址到TCB
+      mov word [es:esi+0x04], 0xffff            ;登记任务状态到TCB（繁忙）即该TCB接下来即将被运行
+      
+      ;初始化TSS各个字段
+      mov word [es:ecx+0], 0                    ;上一个任务的TSS选择子（现代操作系统不使用）
+      ;0特权级的内核任务不需要不同的特权级栈（不能call到低特权级任务）
+      mov dword [es:ecx+28], 0                  ;CR3
+      mov word [es:ecx+96], 0                   ;LDT选择子（在GDT中）内核任务不需要，内核任务的内存描述符在GDT中安装
+      mov dword [es:ecx+100], 0x0067_0000       ;0x67=I/O映射基地址，0特权级I/O读写不限制
+
+ .tss_to_gdt:
       xchg bx, bx
+      mov eax, [es:esi+0x14]                    ;TSS基地址
+      movzx ebx, word [es:esi+0x12]             ;TSS界限值
+      mov ecx, 0x0000_8900                      ;TSS描述符属性                                 
+      call sys_routine_seg_sel:make_seg_descriptor
+                                                ;G DB L AVL=0000、段界限=0
+                                                ;P DPL S=1000、TYPE=1001，其中TYPE的第2位是B位，表示忙不忙，切换到一个任务时CPU会自动将该位置为1，在内存中也是吗？还只是在描述符高速缓冲器中修改？。
+                                                ;TODO-Tips：一会用Bochs测试一下，我猜测是高速缓冲器和内存都修改。猜测正确
+      call sys_routine_seg_sel:install_gdt_descriptor
+
+      mov [es:esi+0x18], cx                     ;登记TSS选择子（在GDT中）TI=0、RPL=0到TCB
+
+      ;ltr r16/m16 将TSS选择子（GDT中）送到tr寄存器，
+      ;然后再去GDT中加载对应的TSS描述符到tr的描述符高速缓冲器中，并将B位置为1（繁忙）
+      ;任务寄存器TR中的内容是任务存在的标志，该内容也决定了当前任务是谁。
+      ;下面的指令为当前正在执行的0特权级任务“程序管理器”后补手续（TSS）。
+      ltr cx                                    
+
+      mov ebx, msg_core_tss_ok
+      call sys_routine_seg_sel:put_string
+
+ .create_user_program_tcb:
       mov ecx, 0x46                             ;tcb size
       call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
       call append_tcb
@@ -945,7 +996,6 @@ SECTION core_code   vstart=0
  .enter_user_program:
       push dword 50
       push ecx                                  ;ecx=分配内存的起始线性地址、也等于当前tcb起始线性地址
-      xchg bx, bx
       call load_relocate_user_program
 
       mov ebx, msg_load_relocate_ok
