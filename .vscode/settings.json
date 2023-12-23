@@ -1,5 +1,6 @@
 {
     "editor.tabSize": 6,
     "codeium.aggressiveShutdown": false,
-    "codeium.enableSearch": true
+    "codeium.enableSearch": true,
+    "window.title": "LZ-ASM"
 }
