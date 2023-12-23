@@ -623,8 +623,8 @@ SECTION core_code   vstart=0
       mov [es:esi+0x06], ebx
 
    .load_user_program:
-   ;ds=4gb
-   ;eax 用户程序所占字节数(512对齐)
+   ;DS=4GB
+   ;EAX=用户程序所占字节数(512对齐)
       push ebx                                  ;暂存为用户程序分配的内存（线性地址）toA
       shr eax, 9                                ;eax/512，2^9=512
       mov ecx, eax                              ;用户程序所占扇区数
