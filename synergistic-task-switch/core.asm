@@ -832,7 +832,7 @@ SECTION core_code   vstart=0
       ;初始化TSS各个字段
       mov word [es:ecx+0x00], 0                 ;前一个任务的TSS段选择子
 
-      .stack_field:
+      stack_field:
       mov eax, [es:esi+0x24]                    
       mov dword [es:ecx+4], eax                 ;0特权级ESP
 
@@ -851,7 +851,7 @@ SECTION core_code   vstart=0
       mov ax, [es:esi+0x3e]                     
       mov word [es:ecx+24], ax                  ;2特权级SS
 
-      .PDBR_field:
+      PDBR_field:
       mov dword [es:ecx+28], 0                  ;CR3，当前为开启分页，暂时为0
 
       ;第一次切换任务时，通用寄存器的内容不重要。
@@ -866,7 +866,7 @@ SECTION core_code   vstart=0
       mov ax, [es:esi+0x10]
       mov [es:ecx+96], ax                       ;LDT段选择子（在GDT中）
 
-      .iomap_field
+      iomap_field
       mov dword [es:ecx+100], 0x0067_0000       ;T=0、I/O映射基地址=0x0067=103（无IO许可位）
 
    .tss_to_gdt:
