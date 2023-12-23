@@ -711,7 +711,7 @@ SECTION core_code   vstart=0
       cld
    ;es:edi <- ds:esi                      
    ;es=4GB、edi=u-salt表起始偏移量 
-   ;ds=core_data、esi=c-salt表起始偏移量
+   ;DS=core_data、ESI=c-salt表起始偏移量
    ;1.因为是修改用户程序中的salt表，u-salt是外围循环
    @for_user_salt:                              ;TODO-Think：想了好久
       push edi
@@ -993,7 +993,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
       call append_tcb
 
- ;ds=用户程序头部段
+ ;DS=用户程序头部段
  .enter_user_program:
       push dword 50
       push ecx                                  ;ecx=分配内存的起始线性地址、也等于当前tcb起始线性地址
