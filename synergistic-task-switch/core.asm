@@ -301,6 +301,8 @@ SECTION sys_routine vstart=0
 
 
    .chech_RPL:
+      ;TODO-Tips：从这里也能看出，RPL是由操作系统控制的，CPU只负责检查RPL与CPL的合法性，不负责鉴别PRL的真实性，真实性由操作系统鉴别。
+      ;操作系统很显然是知道请求者的CPL的，这样就可以判断并修改RPL
       mov ebp, esp
       mov cx, ds
       mov dx, [ss:ebp+6*4]                      ;调用者CS
