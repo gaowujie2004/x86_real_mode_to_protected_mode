@@ -856,13 +856,43 @@ SECTION core_code   vstart=0
 
       ;第一次切换任务时，通用寄存器的内容不重要。
       ;以后【切换任务】时旧任务的各个状态会被CPU自动保存到旧任务的TSS中
+      
+      eflags_field:                             ;IOPL、IF位相当重要，确保万无一失
+                                                ;当CPL>IOPL时不允许执行popf、iret，否则触发中断；可以执行cli、sti，但没有任何效果
+      pushf
+      pop eax                                   ;EAX获取EFLAGS值
+      or eax, 0x0000_0200                       ;IF=1响应中断、OF DF IF TF=0010=0x2
+      and eax, 0xffff_4fff                      ;0100=0x4、IOPL=0，在数值上CPL<=IOPL则I/O读写不受限制
+      mov [es:ecx+36], eax                      ;TSS.EFLAGS
+      
+      eip_cs:
+      mov ebx, [es:esi+0x06]                    ;用户程序起始线性地址
 
-      ;特权级栈必须登记到TSS
+      mov eax, [es:ebx+0x08]                    ;用户程序入口（已被重定位过）（在代码段内的偏移量）
+      mov [es:ecx+32], eax                      ;TSS.EIP
 
+      mov ax, [es:ebx+0x0c]                     ;用户程序代码段段选择子（已被重定位过）
+      mov [es:ecx+76], ax                       ;TSS.CS
 
-      ;TODO-Todo：标志寄存器的 IOPL、TI(中断屏蔽) 不设置了吗？
-      ;当 CPL > IOPL时，不允许执行 popf、iret，否则触发中断；可以执行 cli sti，但没有任何效果
+      ;TODO-Tips：应该担心ds是内核数据段，切换到用户态，用户程序就可以访问到内核数据了吗？
+      ;TODO-Todo：重点关注
 
+      .ss_field:
+      mov ax, [es:ebx+0x1c]                     ;用户程序栈段选择子（已被重定位过）
+                                                ;用户程序的栈内存目前不是内核动态分配，是由用户程序指定大小
+      mov [es:ecx+80], ax
+     
+      .ds_field:
+      mov ax, [es:ebx+0x14]                     ;用户程序数据段选择子
+      mov [es:ecx+84], ax                       ;TSS.ds
+
+      .es_fs_gs_field:
+      mov [es:ecx+72], 0                        ;TSS.es
+      mov [es:ecx+88], 0                        ;TSS.fs
+      mov [es:ecx+92], 0                        ;TSS.gs
+
+      
+      ldt_field:
       mov ax, [es:esi+0x10]
       mov [es:ecx+96], ax                       ;LDT段选择子（在GDT中）
 
