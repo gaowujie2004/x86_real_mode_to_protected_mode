@@ -442,10 +442,123 @@ SECTION sys_routine vstart=0
       pop ds
       retf
 
+ initiative_task_switch:                        ;主动进行任务切换
+                                                ;输入：无、 输出：无
+      ;怎么进行任务切换？从TCB链表找到繁忙的任务，即当前调用initiative_task_switch的任务的tcb，从这个tcb开始向后找一个空闲的tcb
+      ;若向后找不到，则从头开始找，都没找到就退出，任务不切换；若找到了，则把找到的空闲节点的状态反转（变为0xffff，即将开始运行这个任务）
+      ;将旧任务（当前任务）的tcb状态也反转一下，变为0，表示空闲。
+      ;jmp far 指向tss选择子，即可由硬件完成任务切换
+      pusha
+      push ds
+      push es
+
+   ;DS=4GB、ES=core_data
+      mov ax, all_data_seg_sel
+      mov ds, ax
+      mov ax, core_data_seg_sel
+      mov es, ax
 
 
+      mov eax, [es:tcb_head]
+   ;从头找一个繁忙的tcb（当前任务）
+   .find_buzy_tcb:
+      cmp word [eax+0x04], 0xffff               ;EAX当前TCB节点起始线性地址
+      comve esi, eax                            ;找到繁忙节点,ESI=繁忙TCB起始线性地址
+      je .tail_find_idle_tcb                    ;找到繁忙节点                     
+      mov eax, [eax+0x00]                       ;没找到，cur=cur.next
+      jmp .find_buzy_tcb:
 
 
+   ;ESI=繁忙TCB起始线性地址,留给最后使用
+   ;EDI=空闲TCB起始线性地址,留给最后使用
+   ;从繁忙节点的下一个节点开始找空闲节点
+   .tail_find_idle_tcb:
+      mov eax, [eax+0x00]                       ;EAX=繁忙TCB的下一个TCB起始线性地址
+      or eax, eax                               ;是否到尾部?
+      jz haed_find_idle_tab                     ;Y,从头找空闲节点
+      cmp word [eax+0x04], 0                    ;N,没有到尾部
+      cmove edi, eax                            
+      je .ok                                     
+      jmp tail_find_idle_tcb
+
+   ;从头开始找空闲节点
+   .haed_find_idle_tab:
+      mov eax, [es:tcb_head]
+      .for:
+      cmp eax, esi
+      je .return                                ;cur=繁忙节点,还没找到空闲,说明根本没有空闲任务
+      cmp word [eax+0x04], 0
+      cmove edi, eax                            ;为0，则赋值
+      je .ok
+      mov eax, [eax+0x00]                       ;不相等,cur=cur.next
+      jmp .for
+
+   ;ESI=繁忙TCB起始线性地址
+   ;EDI=空闲TCB起始线性地址
+   ;反转状态，准备切换
+   .ok:
+      not word [esi+0x04]                       ;将旧任务TCB状态改为空闲
+      not word [edi+0x04]                       ;将空闲任务TCB改为忙,即将切换到该任务
+      jmp far [edi+0x14]                        ;CPU硬件任务切换
+      ;edi空闲TCB即即将要切换到该任务执行
+      ;CPU发现以edi+0x14为首的6byte内存数据
+      ;其中低2byte数据是TSS选择子,CPU开始执行任务切换的工作
+
+   .return:
+      pop es
+      pop ds
+      popa
+      retf
+
+ terminate_current_task:                        ;终止当前任务,
+      ;设置当前繁忙的TCB节点为0x3333, 后续由do_task_clear负责内存等清理操作
+      ;然后在切换到其他任务,这和do_switch很像
+
+      ;当前任务都要结束了,没必要再保存当前任务的状态了.
+      ;TODO-Tips: 注意,最后没有[ret]
+
+      ;DS=4GB、ES=core_data
+      mov ax, all_data_seg_sel
+      mov ds, ax
+      mov ax, core_data_seg_sel
+      mov es, ax
+
+      ;从TCB链中找到一个繁忙的任务，就是当前要结束的任务。
+      ;因为是要结束的用户任务，调用了全局空间的公共函数，此时还是在当前任务，只不过是全局空间罢了。
+      
+      mov eax, [es:tcb_head]
+   .find_buzy_tcb:
+      cmp word [eax+0x04], 0xffff
+      je .skil
+      ;继续寻找下一个
+      mov eax, [eax+0x00]                       ;cur=cur.next
+      jmp .find_buzy_tcb                        ;不可能发生找不到繁忙的节点，如果有那就是出BUG了
+
+   ;EAX=繁忙的TCB
+   .skil:
+      mov word [eax+0x04], 0x3333
+
+
+      mov eax, [es:tcb_head]                    ;从队首找空闲节点
+   .find_idle_tcb:
+      cmp word [eax+0x04], 0
+      je start_jmp
+      mov eax, [eax+0x00]
+      jmp .find_idle_tcb
+      
+   .start_jmp:
+      not word [eax+0x04]                       ;EAX=从收队开始找的一个空闲节点
+      jmp far  [eax+0x14]                       ;硬件任务切换
+      
+  ;TODO-Tips: 没有【ret】，因为任务已经终止
+
+ do_task_clear:                                 ;任务清理操作, TODO-Todo: 未完成
+      ;搜索TCB链表，找到状态为终止的节点
+      ;将节点从链表中拆除
+      ;回收任务占用的各种资源（可以从它的TCB中找到）
+      ;TODO-Tips: 要在GDT中删除该任务的LDT,导致GDT中后面的描述符都要整体移动,耗费性能.
+      ;TODO-Optimize: 现代操作系统还在使用LDT吗? 我感觉没有了吧? 后面有分页式内存管理
+      retf
 ;============================== sys_routine END =====================================
 
 
@@ -458,7 +571,6 @@ SECTION core_data   vstart=0
 
       core_buf    times 2048 db 0               ;内核数据缓冲区，不用被缓冲区吓到，本质上就是连续的内存，方便内核对数据进行加工、操作的
 
-      esp_pointer dd 0x0000_0000                ;暂存内核ESP
 
       tcb_head    dd 0x0000_0000                ;任务控制块链表
       ;-------------------------SALT--------------------
@@ -473,24 +585,32 @@ SECTION core_data   vstart=0
                   dd read_disk_hard_0
                   dw sys_routine_seg_sel
 
-      salt_last:
+      
       salt_3      db '@terminateProgram'
                   times 256-($-salt_3) db 0
-                  dd return_pointer
-                  dw core_code_seg_sel 
+                  dd terminate_current_task
+                  dw sys_routine_seg_sel
+      
+      salt_last:
+      salt_4      db '@taskSwitch'
+                  times 256-($-salt_4) db 0
+                  dd initiative_task_switch
+                  dw sys_routine_seg_sel    
 
       salt_item_size    equ   $-salt_last
       salt_item_count   equ   ($-salt)/salt_item_size       ;常量不占汇编地址
       ;-------------------------SALT--------------------
 
       msg_enter_core          db            'Core enter success................', 0
-      msg_load_relocate_ok    db 0x0d,0x0a, 'User program load relocate success', 0
-      msg_start_user_program  db 0x0d,0x0a, 'Start enter User program..........', 0
-      msg_again_enter_core    db 0x0d,0x0a, 'Core enter success................', 0       
+      msg_load_relocate_ok    db 0x0d,0x0a, '[Core Task]: User program load relocate success', 0
+      msg_start_user_program  db 0x0d,0x0a, '[Core Task]: Start enter User program..........', 0
+      msg_again_enter_core    db 0x0d,0x0a, '[COre Task]: Core again enter success !!!!!!!!!', 0       
 
       msg_test_call_gate      db 0x0d,0x0a, 'In core, test call gate...........', 0
 
       msg_core_task_run       db 0x0d,0x0a, '[Core Task]: core task runing CPL=0', 0
+
+      msg_core_hlt            db 0x0d,0x0a, '[Core Task]: not more task, core hlt', 0
 
       cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a, 0x20,0x20,0x20,0x20, 0
       cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
@@ -921,7 +1041,7 @@ SECTION core_code   vstart=0
  ;------------------------------------------------------------
  
  ;DS=core_data、ES=4GB
- start:
+start:
       call sys_routine_seg_sel:clear
 
       mov ax, core_data_seg_sel
@@ -1034,8 +1154,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
       call append_tcb
 
- ;DS=用户程序头部段
- .enter_user_program:
+ .load_relocate_user_program:
       push dword 50
       push ecx                                  ;ecx=分配内存的起始线性地址、也等于当前tcb起始线性地址
       call load_relocate_user_program
@@ -1043,43 +1162,30 @@ SECTION core_code   vstart=0
       mov ebx, msg_load_relocate_ok
       call sys_routine_seg_sel:put_string
       
-      mov [esp_pointer], esp                    ;TODO-Todo：还需要吗？
 
-      ;DS=4GB、ECX=TCB起始线性地址
-      mov ax, all_data_seg_sel
-      mov ds, ax
-
-   .load_tts_ldt:
-      lldt [ecx+0x10]                           ;LDT选择子，和lgdt不一样，lgdt是加载GDT起始线性地址、界限； 
-                                                ;而lldt是加载选择子道ldtr的选择器部分，然后根据选择子在GDT中查找LDT描述符，最后载入LDTR描述符高速缓冲器
-      ltr  [ecx+0x18]                           ;TSS选择子，和lldt过程类似
-
-   ;DS切换到用户程序头部段
-   ;DS=用户程序头部段、ECX=TCB起始线性地址
-   .make_gate_return:
-      mov ds, [ecx+0x44]
-      push dword [0x1c]
-      push dword [0x20]                         ;向上扩展的栈段
-
-      push dword [0x0c]                         ;调用者（用户程序）CS
-      push dword [0x08]                         ;调用者（用户程序）EIP
-
-      retf                                      ;远过程调用
-
- return_pointer:
-      mov ax, core_data_seg_sel
-      mov ds, ax
-
-      mov ax, core_stack_seg_sel
-      mov ss, ax
-      mov esp, [esp_pointer]
+ 
+ 
+ .do_switch:
+      call sys_routine_seg_sel:initiative_task_switch
 
       mov ebx, msg_again_enter_core
-      call sys_routine_seg_sel:put_string
- 
-      ;可以继续执行其他程序
-      ;可以执行清理内存的任务
+      call sys_routine_seg_sel:put_string 
 
+      ;任务清理操作
+      ; call sys_routine_seg_sel:do_task_clear
+
+
+      mov ebx, [tcb_head]
+ .find_ready:                                   ;找是否还有空闲任务
+      cmp word [es:ebx+0x04], 0                 ;当前TCB是否是空闲任务
+      je .do_switch                             ;当前TCB是空闲
+      mov ebx, [es:ebx+0x00]                    ;继续找下一个, cur=cur.next
+      or ebx, ebx
+      jnz find_ready                            ;TCB链表没遍历完
+      
+      ;没有空闲任务了,内核睡眠
+      mov ebx, msg_core_hlt
+      call sys_routine_seg_sel:put_string
       hlt
 ;============================== core_code END =============================
 
