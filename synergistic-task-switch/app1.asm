@@ -41,7 +41,11 @@ SECTION header  vstart=0
 ;=============================== data STA =================================
 SECTION data vstart=0
       buffer            times 1024 db  0
-      msg1              db 0x0d,0x0a, 0x20,0x20,0x20,0x20, 'Enter User Program',0
+      msg_start         db 0x0d,0x0a, 0x20,0x20,0x20,0x20, '[App-1]: Enter User Program 111',0
+      msg_switch        db 0x0d,0x0a, 0x20,0x20,0x20,0x20, '[App-1]: now task switch.......',0
+      msg_exit          db 0x0d,0x0a, 0x20,0x20,0x20,0x20, '[App-1]: again enter user program. but now exit !!!!!!',0
+
+
       data_end:
 ;=============================== data END =================================
 
@@ -71,12 +75,15 @@ SECTION code vstart=0
       mov ss, ax
       mov esp, stack_end
 
-      xchg bx, bx
-      mov ebx, msg1
-      call far [fs:PrintfString]                ;间接远转移，必须要指定far
+      mov ebx, msg_start
+      call far [fs:PrintfString]                ;间接远调用，必须要指定far
 
+      mov ebx, msg_switch
+      call far [fs:PrintfString]
+
+
+      mov ebx, msg_exit
       call far [fs:TerminateProgram]
-
 
 
  code_end:
