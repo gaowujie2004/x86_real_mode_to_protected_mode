@@ -463,10 +463,10 @@ SECTION sys_routine vstart=0
    ;从头找一个繁忙的tcb（当前任务）
    .find_buzy_tcb:
       cmp word [eax+0x04], 0xffff               ;EAX当前TCB节点起始线性地址
-      comve esi, eax                            ;找到繁忙节点,ESI=繁忙TCB起始线性地址
+      cmove esi, eax                            ;找到繁忙节点,ESI=繁忙TCB起始线性地址
       je .tail_find_idle_tcb                    ;找到繁忙节点                     
       mov eax, [eax+0x00]                       ;没找到，cur=cur.next
-      jmp .find_buzy_tcb:
+      jmp .find_buzy_tcb
 
 
    ;ESI=繁忙TCB起始线性地址,留给最后使用
@@ -475,11 +475,11 @@ SECTION sys_routine vstart=0
    .tail_find_idle_tcb:
       mov eax, [eax+0x00]                       ;EAX=繁忙TCB的下一个TCB起始线性地址
       or eax, eax                               ;是否到尾部?
-      jz haed_find_idle_tab                     ;Y,从头找空闲节点
+      jz .haed_find_idle_tab                     ;Y,从头找空闲节点
       cmp word [eax+0x04], 0                    ;N,没有到尾部
       cmove edi, eax                            
       je .ok                                     
-      jmp tail_find_idle_tcb
+      jmp .tail_find_idle_tcb
 
    ;从头开始找空闲节点
    .haed_find_idle_tab:
@@ -542,7 +542,7 @@ SECTION sys_routine vstart=0
       mov eax, [es:tcb_head]                    ;从队首找空闲节点
    .find_idle_tcb:
       cmp word [eax+0x04], 0
-      je start_jmp
+      je .start_jmp
       mov eax, [eax+0x00]
       jmp .find_idle_tcb
       
@@ -1010,16 +1010,16 @@ SECTION core_code   vstart=0
       mov [es:ecx+84], ax                       ;TSS.ds=头部选择子
 
       .es_fs_gs_field:
-      mov [es:ecx+72], 0                        ;TSS.es
-      mov [es:ecx+88], 0                        ;TSS.fs
-      mov [es:ecx+92], 0                        ;TSS.gs
+      mov word [es:ecx+72], 0                        ;TSS.es
+      mov word [es:ecx+88], 0                        ;TSS.fs
+      mov word [es:ecx+92], 0                        ;TSS.gs
 
       
       ldt_field:
       mov ax, [es:esi+0x10]
       mov [es:ecx+96], ax                       ;LDT段选择子（在GDT中）
 
-      iomap_field
+      iomap_field:
       mov dword [es:ecx+100], 0x0067_0000       ;T=0、I/O映射基地址=0x0067=103（无IO许可位）
 
    .tss_to_gdt:
@@ -1181,7 +1181,7 @@ start:
       je .do_switch                             ;当前TCB是空闲
       mov ebx, [es:ebx+0x00]                    ;继续找下一个, cur=cur.next
       or ebx, ebx
-      jnz find_ready                            ;TCB链表没遍历完
+      jnz .find_ready                            ;TCB链表没遍历完
       
       ;没有空闲任务了,内核睡眠
       mov ebx, msg_core_hlt
