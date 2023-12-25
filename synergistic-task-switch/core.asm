@@ -1041,7 +1041,30 @@ SECTION core_code   vstart=0
       popad
       ret 8                                     ;过程的编写者最清楚栈中有几个参数，丢弃8byte的参数，即过程返回到调用本函数的下一条指令后，ESP <- ESP+8
  ;------------------------------------------------------------
- 
+ create_user_program:                           ;创建一个用户程序
+                                                ;输入：EDI=用户程序起始逻辑扇区号
+                                                ;输出：无
+      push ecx
+      push ebx
+
+   .create_tcb:
+      mov ecx, 0x46                             ;tcb size
+      call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
+      call append_tcb
+
+   .load_relocate:
+      push dword edi
+      push ecx                                  ;ecx=分配内存的起始线性地址、也等于当前tcb起始线性地址
+      call load_relocate_user_program
+
+      mov ebx, msg_load_relocate_ok
+      call sys_routine_seg_sel:put_string
+   
+   .return:
+      pop ecx
+      pop ebx
+      ret
+ ;------------------------------------------------------------
  ;DS=core_data、ES=4GB
 start:
       call sys_routine_seg_sel:clear
@@ -1150,21 +1173,10 @@ start:
       mov ebx, msg_core_task_run
       call sys_routine_seg_sel:put_string
 
- .create_user_program_tcb:
-      mov ecx, 0x46                             ;tcb size
-      call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
-      call append_tcb
 
  .load_relocate_user_program:
-      push dword 50
-      push ecx                                  ;ecx=分配内存的起始线性地址、也等于当前tcb起始线性地址
-      call load_relocate_user_program
-
-      mov ebx, msg_load_relocate_ok
-      call sys_routine_seg_sel:put_string
-      
-
- 
+      mov edi, 50                               ;用户程序LBA
+      call create_user_program
  
  .do_switch:
       xchg bx, bx
