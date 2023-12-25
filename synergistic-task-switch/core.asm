@@ -490,7 +490,7 @@ SECTION core_data   vstart=0
 
       msg_test_call_gate      db 0x0d,0x0a, 'In core, test call gate...........', 0
 
-      msg_core_tss_ok         db 0x0d,0x0a, '[Core Task]: core task runing CPL=0', 0
+      msg_core_task_run       db 0x0d,0x0a, '[Core Task]: core task runing CPL=0', 0
 
       cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a, 0x20,0x20,0x20,0x20, 0
       cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
@@ -1026,7 +1026,7 @@ SECTION core_code   vstart=0
       ;当前任务是内核任务，TR指向内核任务的TSS
       ltr cx                                    
 
-      mov ebx, msg_core_tss_ok
+      mov ebx, msg_core_task_run
       call sys_routine_seg_sel:put_string
 
  .create_user_program_tcb:
