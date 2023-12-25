@@ -1006,7 +1006,7 @@ SECTION core_code   vstart=0
       mov word [es:ecx+96], 0                   ;LDT选择子（在GDT中）内核任务不需要，内核任务的内存描述符在GDT中安装
       mov dword [es:ecx+100], 0x0067_0000       ;0x67=I/O映射基地址，0特权级I/O读写不限制
 
- .tss_to_gdt:
+ .core_tss_to_gdt:
       xchg bx, bx
       mov eax, [es:esi+0x14]                    ;TSS基地址
       movzx ebx, word [es:esi+0x12]             ;TSS界限值
