@@ -40,11 +40,10 @@ SECTION header  vstart=0
       [bits 32]  
 ;=============================== data STA =================================
 SECTION data vstart=0
-      buffer            times 1024 db  0
       msg_start         db 0x0d,0x0a, 0x20,0x20,0x20,0x20, '[App-1]: Enter User Program 111',0
       msg_switch        db 0x0d,0x0a, 0x20,0x20,0x20,0x20, '[App-1]: now task switch.......',0
       msg_exit          db 0x0d,0x0a, 0x20,0x20,0x20,0x20, '[App-1]: again enter user program. but now exit !!!!!!',0
-
+      buffer            times 1024 db  0
 
       data_end:
 ;=============================== data END =================================
