@@ -1006,13 +1006,15 @@ SECTION core_code   vstart=0
       mov [es:ecx+80], ax
      
       .ds_field:
-      mov ax, [es:ebx+0x04]                     ;用户程序数据段选择子
+      mov ax, [es:ebx+0x04]                     ;用户程序头部段选择子
       mov [es:ecx+84], ax                       ;TSS.ds=头部选择子
 
       .es_fs_gs_field:
-      mov word [es:ecx+72], 0                        ;TSS.es
-      mov word [es:ecx+88], 0                        ;TSS.fs
-      mov word [es:ecx+92], 0                        ;TSS.gs
+      mov word [es:ecx+72], 0                   ;TSS.es
+      mov word [es:ecx+88], 0                   ;TSS.fs
+      mov word [es:ecx+92], 0                   ;TSS.gs
+      mov ax, [es:ebx+0x1c]
+      mov word [es:ecx+80], ax                  ;TSS.ss 
 
       
       ldt_field:
@@ -1127,7 +1129,6 @@ start:
       mov dword [es:ecx+100], 0x0067_0000       ;0x67=I/O映射基地址，0特权级I/O读写不限制
 
  .core_tss_to_gdt:
-      xchg bx, bx
       mov eax, [es:esi+0x14]                    ;TSS基地址
       movzx ebx, word [es:esi+0x12]             ;TSS界限值
       mov ecx, 0x0000_8900                      ;TSS描述符属性                                 
@@ -1166,6 +1167,7 @@ start:
  
  
  .do_switch:
+      xchg bx, bx
       call sys_routine_seg_sel:initiative_task_switch
 
       mov ebx, msg_again_enter_core
