@@ -2,6 +2,7 @@
       ;首先要将操作系统内核也变为一个任务，那就得创建TSS。内核因为是和0特权级绑定在一起的，所以可以没有LDT，直接使用GDT
       ;创建用户任务，上一章中并没有形成一个CPU规定的任务，上一章重点是特权级
       ;当前是在内核任务，将控制转移到用户任务，因为都是任务那就使用任务切换的方法转移控制
+      ;     jmp far tss选择子，硬件任务切换
       
       video_card_index_port   equ     0x3d4                 ;显卡的功能索引寄存器端口
       video_card_data_port    equ     0x3d5                 ;显卡的数据寄存器端口
@@ -885,8 +886,8 @@ SECTION core_code   vstart=0
       mov [es:ecx+80], ax
      
       .ds_field:
-      mov ax, [es:ebx+0x14]                     ;用户程序数据段选择子
-      mov [es:ecx+84], ax                       ;TSS.ds
+      mov ax, [es:ebx+0x04]                     ;用户程序数据段选择子
+      mov [es:ecx+84], ax                       ;TSS.ds=头部选择子
 
       .es_fs_gs_field:
       mov [es:ecx+72], 0                        ;TSS.es
