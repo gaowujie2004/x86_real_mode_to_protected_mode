@@ -45,7 +45,7 @@ SECTION MBR
       out 0x92,al                               ;打开A20
   
   .disable_interrupt:
-      cli                                       ;保护模式下中断机制与实模式不同，而且还为建立中断表
+      cli                                       ;保护模式下中断机制与实模式不同，而且还未建立中断表
 
   .enter_protected_mode:
       mov eax, cr0
