@@ -132,7 +132,6 @@ put_char:                                       ;打印一个字符
       rep movsd                                 ;edi、esi步长是4（双字）rep movsd，32位保护模式时，使用的是ecx
       ;最后一行置空（黑底白字空格字符）
       mov ecx, 40                               ;本来是要循环160次的，但现在每次四个字节操。 TODO:Think-CPU和数据总线拥有更宽的数据通路，所执行的指令个数就会减少，充分体现了性能的优化
-      mov esi, 24*80*2
       .loop_cls:
       mov dword [esi], 0x07200720               ;在上一步rep movsd结束时，esi偏移量是24*80*2，符合预期。（行从0开始）
       add esi, 4 
