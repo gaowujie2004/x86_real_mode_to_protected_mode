@@ -465,6 +465,14 @@ SECTION sys_routine vstart=0
       mov ax, core_data_seg_sel
       mov es, ax
 
+      ;0个任务或1个任务
+      mov eax, [es:tcb_head]
+      or eax, eax
+      jz .return                                ;eax=0,一个任务都没有
+      mov eax, [es:eax+0x00]                    ;cur=cur.next
+      or eax, eax
+      jz .return 
+
 
       mov eax, [es:tcb_head]
    ;从头找一个繁忙的tcb（当前任务）
@@ -568,14 +576,14 @@ SECTION sys_routine vstart=0
       retf
 
  external_interrupt_handle:                     ;通用的中断处理过程(硬件中断)
-         push eax
+      push eax
                                                 ;TODO-BUG: 这是很重要的，系统中有很多的外中断，得向8259A发送中断结束命令，要不然8259A就只生成一次中断信号，因为没有收到中断结束信号
-         mov al,0x20                            ;中断结束命令EOI
-         out 0xa0,al                            ;向从片发送
-         out 0x20,al                            ;向主片发送
+      mov al,0x20                               ;中断结束命令EOI
+      out 0xa0,al                               ;向从片发送
+      out 0x20,al                               ;向主片发送
 
-         pop eax
-         iretd
+      pop eax
+      iretd
 
  inside_interrupt_handle:                       ;通用的异常处理(内中断)过程
          mov ebx, msg_enter_core
@@ -583,7 +591,6 @@ SECTION sys_routine vstart=0
          hlt
 
  rtc_0x70_interrupt_handle:                     ;实时时钟RTC外中断
-      push ds
       push eax
       push ebx
 
@@ -597,15 +604,10 @@ SECTION sys_routine vstart=0
       out rtc_index_port, al
       in al, rtc_data_port
 
-      mov ax, core_data_seg_sel
-      mov ds, ax
-
-      mov ebx, msg_0x70_interrupt
-      call sys_routine_seg_sel:put_string
+      call sys_routine_seg_sel:initiative_task_switch
       
       pop ebx
       pop eax
-      pop ds
       iret
 
 ;============================== sys_routine END =====================================
@@ -1275,6 +1277,7 @@ start:
       mov ebx, msg_test_call_gate
       call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
 
+      cli                                       ;TODO-Tips:创建任务的过程中，关闭外中断
  .create_core_tcb:
       mov ecx, 0x46
       call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TCB起始线性地址
@@ -1326,31 +1329,13 @@ start:
 
       mov edi, 70                               ;第二个用户程序LBA
       call create_user_program
- 
- .do_switch:
-      xchg bx, bx
-      call sys_routine_seg_sel:initiative_task_switch
-
-      mov ebx, msg_again_enter_core
-      call sys_routine_seg_sel:put_string 
-
-      ;任务清理操作
-      ; call sys_routine_seg_sel:do_task_clear
-
-
-      mov ebx, [tcb_head]
- .find_ready:                                   ;找是否还有空闲任务
-      cmp word [es:ebx+0x04], 0                 ;当前TCB是否是空闲任务
-      je .do_switch                             ;当前TCB是空闲
-      mov ebx, [es:ebx+0x00]                    ;继续找下一个, cur=cur.next
-      or ebx, ebx
-      jnz .find_ready                            ;TCB链表没遍历完
       
-      ;没有空闲任务了,内核睡眠
-      mov ebx, msg_core_hlt
-      call sys_routine_seg_sel:put_string
-      hlt
-      jmp $
+      sti                                       ;任务都创建好了，开放外中断1
+
+ .do_switch:
+      ;任务清理操作
+      call sys_routine_seg_sel:do_task_clear
+      jmp do_switch
 ;============================== core_code END =============================
 
 
