@@ -1252,104 +1252,104 @@ start:
       mov ebx, cpu_brand
       call sys_routine_seg_sel:put_string
 
-;  .public_func_call_game:                        ;不同特权级之间进行控制转移，可以通过调用门来完成
-;       mov edi, salt
-;       mov ecx, salt_item_count
-;    .for_to_gate:                                ;为每个条目安装门描述符
-;       push ecx                                  ;暂存ecx
+ .public_func_call_game:                        ;不同特权级之间进行控制转移，可以通过调用门来完成
+      mov edi, salt
+      mov ecx, salt_item_count
+   .for_to_gate:                                ;为每个条目安装门描述符
+      push ecx                                  ;暂存ecx
 
-;       mov eax, [edi+256]                        ;公共函数（目标代码）段内偏移量
-;       mov bx, [edi+260]                         ;公共函数（目标代码）段选择子
-;       mov cx, 0B1_11_0_1100_000_00000           ;调用门描述符属性，DPL=3，要求（CPL&&RPL <= 门描述符DPL) && CPL >= 目标代码段描述符DPL
-;       call sys_routine_seg_sel:make_gate_descriptor
-;       call sys_routine_seg_sel:install_gdt_descriptor
-;                                                 ;将调用门描述符安装到GDT
+      mov eax, [edi+256]                        ;公共函数（目标代码）段内偏移量
+      mov bx, [edi+260]                         ;公共函数（目标代码）段选择子
+      mov cx, 0B1_11_0_1100_000_00000           ;调用门描述符属性，DPL=3，要求（CPL&&RPL <= 门描述符DPL) && CPL >= 目标代码段描述符DPL
+      call sys_routine_seg_sel:make_gate_descriptor
+      call sys_routine_seg_sel:install_gdt_descriptor
+                                                ;将调用门描述符安装到GDT
                         
-;       mov [edi+260], cx                         ;回填调用门描述符选择子
+      mov [edi+260], cx                         ;回填调用门描述符选择子
 
-;       pop ecx
-;       add edi, salt_item_size
-;       loop .for_to_gate
+      pop ecx
+      add edi, salt_item_size
+      loop .for_to_gate
  
-;    .test_call_gate:
-;       mov ebx, msg_test_call_gate
-;       call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
+   .test_call_gate:
+      mov ebx, msg_test_call_gate
+      call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
 
-;  .create_core_tcb:
-;       mov ecx, 0x46
-;       call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TCB起始线性地址
-;       call append_tcb                           ;输入：ECX
-;       mov esi, ecx
-;  ;ESI=TCB起始线性地址                              
-;  .create_core_tss:
-;       mov ecx, 103
-;       mov [es:esi+0x12], ecx                    ;登记TSS界限到TCB
-;       inc ecx                                   ;TSS长度
-;       call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TSS起始线性地址
+ .create_core_tcb:
+      mov ecx, 0x46
+      call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TCB起始线性地址
+      call append_tcb                           ;输入：ECX
+      mov esi, ecx
+ ;ESI=TCB起始线性地址                              
+ .create_core_tss:
+      mov ecx, 103
+      mov [es:esi+0x12], ecx                    ;登记TSS界限到TCB
+      inc ecx                                   ;TSS长度
+      call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TSS起始线性地址
       
-;       mov [es:esi+0x14], ecx                    ;登记TSS基地址到TCB
-;       mov word [es:esi+0x04], 0xffff            ;登记任务状态到TCB（繁忙）即该TCB接下来即将被运行
+      mov [es:esi+0x14], ecx                    ;登记TSS基地址到TCB
+      mov word [es:esi+0x04], 0xffff            ;登记任务状态到TCB（繁忙）即该TCB接下来即将被运行
       
-;       ;初始化TSS各个字段
-;       mov word [es:ecx+0], 0                    ;上一个任务的TSS选择子（现代操作系统不使用）
-;       ;0特权级的内核任务不需要不同的特权级栈（不能call到低特权级任务）
-;       mov dword [es:ecx+28], 0                  ;CR3
-;       mov word [es:ecx+96], 0                   ;LDT选择子（在GDT中）内核任务不需要，内核任务的内存描述符在GDT中安装
-;       mov dword [es:ecx+100], 0x0067_0000       ;0x67=I/O映射基地址，0特权级I/O读写不限制
+      ;初始化TSS各个字段
+      mov word [es:ecx+0], 0                    ;上一个任务的TSS选择子（现代操作系统不使用）
+      ;0特权级的内核任务不需要不同的特权级栈（不能call到低特权级任务）
+      mov dword [es:ecx+28], 0                  ;CR3
+      mov word [es:ecx+96], 0                   ;LDT选择子（在GDT中）内核任务不需要，内核任务的内存描述符在GDT中安装
+      mov dword [es:ecx+100], 0x0067_0000       ;0x67=I/O映射基地址，0特权级I/O读写不限制
 
-;  .core_tss_to_gdt:
-;       mov eax, [es:esi+0x14]                    ;TSS基地址
-;       movzx ebx, word [es:esi+0x12]             ;TSS界限值
-;       mov ecx, 0x0000_8900                      ;TSS描述符属性                                 
-;       call sys_routine_seg_sel:make_seg_descriptor
-;                                                 ;G DB L AVL=0000、段界限=0
-;                                                 ;P DPL S=1000、TYPE=1001，其中TYPE的第2位是B位，表示忙不忙，切换到一个任务时CPU会自动将该位置为1，在内存中也是吗？还只是在描述符高速缓冲器中修改？。
-;                                                 ;TODO-Tips：一会用Bochs测试一下，我猜测是高速缓冲器和内存都修改。猜测正确
-;       call sys_routine_seg_sel:install_gdt_descriptor
+ .core_tss_to_gdt:
+      mov eax, [es:esi+0x14]                    ;TSS基地址
+      movzx ebx, word [es:esi+0x12]             ;TSS界限值
+      mov ecx, 0x0000_8900                      ;TSS描述符属性                                 
+      call sys_routine_seg_sel:make_seg_descriptor
+                                                ;G DB L AVL=0000、段界限=0
+                                                ;P DPL S=1000、TYPE=1001，其中TYPE的第2位是B位，表示忙不忙，切换到一个任务时CPU会自动将该位置为1，在内存中也是吗？还只是在描述符高速缓冲器中修改？。
+                                                ;TODO-Tips：一会用Bochs测试一下，我猜测是高速缓冲器和内存都修改。猜测正确
+      call sys_routine_seg_sel:install_gdt_descriptor
 
-;       mov [es:esi+0x18], cx                     ;登记TSS选择子（在GDT中）TI=0、RPL=0到TCB
+      mov [es:esi+0x18], cx                     ;登记TSS选择子（在GDT中）TI=0、RPL=0到TCB
 
-;       ;ltr r16/m16 将TSS选择子（GDT中）送到tr寄存器，
-;       ;然后再去GDT中加载对应的TSS描述符到tr的描述符高速缓冲器中，并将B位置为1（繁忙）
-;       ;任务寄存器TR中的内容是任务存在的标志，该内容也决定了当前任务是谁。
-;       ;下面的指令为当前正在执行的0特权级任务“程序管理器”后补手续（TSS）。
-;       ;当前任务是内核任务，TR指向内核任务的TSS
-;       ltr cx                                    
+      ;ltr r16/m16 将TSS选择子（GDT中）送到tr寄存器，
+      ;然后再去GDT中加载对应的TSS描述符到tr的描述符高速缓冲器中，并将B位置为1（繁忙）
+      ;任务寄存器TR中的内容是任务存在的标志，该内容也决定了当前任务是谁。
+      ;下面的指令为当前正在执行的0特权级任务“程序管理器”后补手续（TSS）。
+      ;当前任务是内核任务，TR指向内核任务的TSS
+      ltr cx                                    
 
-;       mov ebx, msg_core_task_run
-;       call sys_routine_seg_sel:put_string
+      mov ebx, msg_core_task_run
+      call sys_routine_seg_sel:put_string
 
 
-;  .load_relocate_user_program:
-;       mov edi, 50                               ;用户程序LBA
-;       call create_user_program
+ .load_relocate_user_program:
+      mov edi, 50                               ;用户程序LBA
+      call create_user_program
 
-;       mov edi, 70                               ;第二个用户程序LBA
-;       call create_user_program
+      mov edi, 70                               ;第二个用户程序LBA
+      call create_user_program
  
-;  .do_switch:
-;       xchg bx, bx
-;       call sys_routine_seg_sel:initiative_task_switch
+ .do_switch:
+      xchg bx, bx
+      call sys_routine_seg_sel:initiative_task_switch
 
-;       mov ebx, msg_again_enter_core
-;       call sys_routine_seg_sel:put_string 
+      mov ebx, msg_again_enter_core
+      call sys_routine_seg_sel:put_string 
 
-;       ;任务清理操作
-;       ; call sys_routine_seg_sel:do_task_clear
+      ;任务清理操作
+      ; call sys_routine_seg_sel:do_task_clear
 
 
-;       mov ebx, [tcb_head]
-;  .find_ready:                                   ;找是否还有空闲任务
-;       cmp word [es:ebx+0x04], 0                 ;当前TCB是否是空闲任务
-;       je .do_switch                             ;当前TCB是空闲
-;       mov ebx, [es:ebx+0x00]                    ;继续找下一个, cur=cur.next
-;       or ebx, ebx
-;       jnz .find_ready                            ;TCB链表没遍历完
+      mov ebx, [tcb_head]
+ .find_ready:                                   ;找是否还有空闲任务
+      cmp word [es:ebx+0x04], 0                 ;当前TCB是否是空闲任务
+      je .do_switch                             ;当前TCB是空闲
+      mov ebx, [es:ebx+0x00]                    ;继续找下一个, cur=cur.next
+      or ebx, ebx
+      jnz .find_ready                            ;TCB链表没遍历完
       
-;       ;没有空闲任务了,内核睡眠
-;       mov ebx, msg_core_hlt
-;       call sys_routine_seg_sel:put_string
-;       hlt
+      ;没有空闲任务了,内核睡眠
+      mov ebx, msg_core_hlt
+      call sys_routine_seg_sel:put_string
+      hlt
       jmp $
 ;============================== core_code END =============================
 
