@@ -7,6 +7,9 @@
       cursor_l8_port          equ     0x0f                  ;光标寄存器索引端口，低8位， 00表示光标在第0行0列，80表示光标在1行0列，这里的值其实是偏移量。行、列从0开始。
       CR                      equ     0x0d                  ;CR回车ASCII码值，当前首行
       LF                      equ     0x0a                  ;LF换行ASCII码值，垂直下行，不是下行的首行
+
+      rtc_index_port          equ     0x70                  ;NMI打开/关闭在最高位，1关闭、0打开
+      rtc_data_port           equ     0x71
       
       
       all_data_seg_sel    equ     0B00000000_00001_000      ;0x08，4GB数据段选择子
@@ -19,6 +22,8 @@
       core_code_seg_sel   equ     0B00000000_00111_000      ;0x38，内核代码段选择子
 
       user_program_start_sector     equ   50                ;用户程序所在逻辑扇区号（LBA）
+
+      idt_linear_address            equ   0x1_f000           ;中断描述符表的起始线性地址
 
 ;=============================== header STR =================================
 SECTION header  vstart=0
@@ -560,6 +565,19 @@ SECTION sys_routine vstart=0
       ;TODO-Tips: 要在GDT中删除该任务的LDT,导致GDT中后面的描述符都要整体移动,耗费性能.
       ;TODO-Optimize: 现代操作系统还在使用LDT吗? 我感觉没有了吧? 后面有分页式内存管理
       retf
+
+ inside_interrupt_handle:
+      
+      iret
+
+
+ external_interrupt_handle:
+      iret
+
+ rtc_0x70_interrupt_handle:                     ;实时时钟RTC外中断
+
+      iret
+
 ;============================== sys_routine END =====================================
 
 
@@ -567,6 +585,9 @@ SECTION sys_routine vstart=0
 SECTION core_data   vstart=0
       pgdt        dw 0                          ;GDT界限=长度-1
                   dd 0x0000_0000                ;GDT起始线性地址
+      
+      pidt        dw 0                          ;IDT界限=长度-1
+                  dd 0x0000_0000                ;IDT起始线性地址
 
       ram_alloc   dd 0x0010_0000                ;用户程序动态内存分配起始线性地址（未开启分页就是物理地址）
 
@@ -1078,6 +1099,96 @@ start:
 
       mov ebx, msg_enter_core
       call sys_routine_seg_sel:put_string
+
+      ;确定IDT的起始位置
+      ;安装IDT描述符,前20个是CPU内部中断,暂时提供一个统一的先兜着; 其他的一直到255,也弄一个统一的兜着,但0x70号中断需要单独处理
+      ;IDT描述符安装完成后，开始加载IDTR，让IDTR48位寄存器保存IDT起始线性地址&界限
+ .inside_interrupt:
+      mov eax, inside_interrupt_handle          ;目标代码段32位偏移地址
+      mov bx, sys_routine_seg_sel               ;目标代码段选择子
+      mov cx, 0x8e00                            ;门描述符(中断门)属性
+      call sys_routine_seg_sel:make_gate_descriptor
+      
+      mov ebx, idt_linear_address
+      xor edi, edi
+   .for_inside_install:
+      mov [es:ebx+edi*8], eax                      ;缺陷门描述符低32位
+      mov [es:ebx+edi*8+4], edx                    ;缺陷门描述符高32位
+      inc edi
+      cmp edi, 19
+      jle .for_inside_install
+  
+ .external_interrupt:
+      mov eax, external_interrupt_handle
+      mov bx, sys_routine_seg_sel
+      mov cx, 0x8e00                            ;中断门描述符属性 
+      call sys_routine_seg_sel:make_gate_descriptor
+
+      mov ebx, idt_linear_address
+      mov edi, 32
+   .for_install_external:
+      mov [es:ebx+edi*8], eax
+      mov [es:ebx+edi*8+4], edx
+      inc edi
+      cmp edi, 255
+      jle .for_install_external                 ;edi<=255,则循环
+ 
+ .0x70_external_interrupt:
+      mov eax, rtc_0x70_interrupt_handle
+      mov bx, sys_routine_seg_sel
+      mov cx, 0x8e00                            ;中断门描述符属性 
+      call sys_routine_seg_sel:make_gate_descriptor
+
+      mov ebx, idt_linear_address
+      mov [es:ebx+0x70*8], eax
+      mov [es:ebx+0x70*8+4], edx
+ 
+ .load_idt:
+      mov word [pidt], 256*8-1                  ;长度(字节数)-1
+      mov dword [pidt+2], idt_linear_address
+      lidt [pidt]
+
+ .set_8259a:
+      ;设置8259A控制芯片 ？ 在保护模式下，如果计算机系统的可编程中断控制器芯片还是8259A，那就得重新进行初始化
+      ;重新初始化8259A芯片的原因: 其主片的中断向量和处理器的异常向量冲突
+      mov al, 0B0001_0001
+      out 0x20, al                              ;主片CW1,边沿触发/联级方式
+      mov al, 0x20
+      out 0x21, al                              ;主片CW2,设置主片的起始中断号
+      mov al, 0B0000_0100
+      out 0x21, al                              ;主片CW3,第三个引脚(IR2)与从片相连
+      mov al, 0B0000_0001
+      out 0x21, al                              ;主片CW4,位1设置非自动结束
+
+      mov al, 0B0001_0001
+      out 0xa0, al                              ;从片CW1,边沿触发/联级方式
+      mov al, 0x70
+      out 0xa1, al                              ;从片CW2,起始中断向量号
+      mov al, 0x02 
+      out 0xa1, al                              ;从片CW3,主片IR2与从片相连
+      mov al, 0B0000_0001 
+      out 0xa1, al                              ;从片CW4
+
+ .set_rtc:                                      ;初始化实时时钟芯片
+      ;RTC-B寄存器端口,设置开启哪些中断,目前只开启[更新周期结束中断]
+      mov al, 0x0B                              ;操作B寄存器
+      out rtc_index_port, al
+      mov al, 0b0001_0010                         
+      out rtc_data_port, al                     ;RTC-B寄存器:中断允许开关,目前只允许[更新周期结束中断]
+
+      ;RTC-C寄存器(中断发生，中断类型)读取即清零,这样中断才会持续产生。
+      mov al, 0x0c                              ;高1位——NMI为0,即打开NMI引脚信号
+      out rtc_index_port, al
+      in al, rtc_data_port
+    
+      ;设置8259A中断屏蔽寄存器
+      ;0是开放，1是断开该中断引脚
+      in al, 0xa1                               ;从片端口
+      and al, 0b1111_1110                       ;1-7位保持原位，0位即从片的IR0引脚
+      out 0xa1, al
+
+      sti                                       ;所有工作完成,开放外中断
+
 
  .printf_cpu_info:
       mov ebx, cpu_brand0
