@@ -575,7 +575,29 @@ SECTION sys_routine vstart=0
       iret
 
  rtc_0x70_interrupt_handle:                     ;实时时钟RTC外中断
+      push ds
+      push eax
+      push ebx
 
+      ;TODO-Tips:可以放在最后吗?
+      mov al,0x20                                 ;中断结束命令EOI 
+      out 0xa0,al                                 ;向从片发送 
+      out 0x20,al                                 ;向主片发送
+
+      ;读取一下,清空RTC-C寄存器
+      mov al, 0x0C
+      out rtc_index_port, al
+      in al, rtc_data_port
+
+      mov ax, core_data_seg_sel
+      mov ds, ax
+
+      mov ebx, msg_0x70_interrupt
+      call sys_routine_seg_sel:put_string
+      
+      pop ebx
+      pop eax
+      pop ds
       iret
 
 ;============================== sys_routine END =====================================
@@ -633,6 +655,8 @@ SECTION core_data   vstart=0
       msg_core_task_run       db 0x0d,0x0a, '[Core Task]: core task runing CPL=0', 0
 
       msg_core_hlt            db 0x0d,0x0a, '[Core Task]: not more task, core hlt', 0
+
+      msg_0x70_interrupt      db 0x0d,0x0a, '[0x70]: hhhh, This is Test!.........', 0
 
       cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a, 0x20,0x20,0x20,0x20, 0
       cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
