@@ -164,6 +164,9 @@ SECTION sys_routine vstart=0
                                                 ;输出：无
       push ecx
       push ebx
+      pushf
+
+      cli
 
    .each_char:                                 
       mov cl, [ebx]
@@ -174,6 +177,7 @@ SECTION sys_routine vstart=0
       jmp .each_char
 
    .put_string_return:
+      popf
       pop ebx
       pop ecx
       retf
