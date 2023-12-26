@@ -469,7 +469,7 @@ SECTION sys_routine vstart=0
       mov eax, [es:tcb_head]
       or eax, eax
       jz .return                                ;eax=0,一个任务都没有
-      mov eax, [es:eax+0x00]                    ;cur=cur.next
+      mov eax, [eax+0x00]                       ;cur=cur.next
       or eax, eax
       jz .return 
 
@@ -593,6 +593,7 @@ SECTION sys_routine vstart=0
  rtc_0x70_interrupt_handle:                     ;实时时钟RTC外中断
       push eax
       push ebx
+      push ds
 
       ;TODO-Tips:可以放在最后吗?
       mov al,0x20                               ;中断结束命令EOI 
@@ -604,8 +605,16 @@ SECTION sys_routine vstart=0
       out rtc_index_port, al
       in al, rtc_data_port
 
+      mov ax, all_data_seg_sel
+      mov ds, ax
+      mov ebx, msg_0x70_interrupt
+      call sys_routine_seg_sel:put_string
+
+
+      xchg bx, bx
       call sys_routine_seg_sel:initiative_task_switch
       
+      pop ds
       pop ebx
       pop eax
       iret
@@ -1161,7 +1170,6 @@ start:
       call sys_routine_seg_sel:make_gate_descriptor
 
       mov ebx, idt_linear_address
-      mov edi, 32
    .for_install_external:
       mov [es:ebx+edi*8], eax
       mov [es:ebx+edi*8+4], edx
