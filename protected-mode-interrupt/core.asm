@@ -1335,7 +1335,7 @@ start:
  .do_switch:
       ;任务清理操作
       call sys_routine_seg_sel:do_task_clear
-      jmp do_switch
+      jmp .do_switch
 ;============================== core_code END =============================
 
 
