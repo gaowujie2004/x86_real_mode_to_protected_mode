@@ -49,13 +49,13 @@ SECTION header  vstart=0
 ;============================== sys_routine STR ==============================
       [bits 32]
 SECTION sys_routine vstart=0
- put_char:                                      ;打印一个字符
+put_char:                                       ;打印一个字符
                                                 ;输入：cl=ASCII码
       push edi
       push esi
-      push ax
-      push bx
-      push dx
+      push eax
+      push ebx
+      push edx
 
       push ds
       push es
@@ -80,19 +80,18 @@ SECTION sys_routine vstart=0
       ;选择跳转
    .process_jmp:
       cmp cl, CR
-      je .put_cr                                ;相等则跳转，是回车
+      je .put_cr                                ;相等则跳转，是回车，首行
 
       cmp cl, LF
-      je .put_lf                                ;相等则跳转，是换行
+      je .put_lf                                ;相等则跳转，是换行，垂直下行
 
       jmp .put_other
 
       ;首行，BX=光标为当前首行
    .put_cr:
-      mov dx, 0
       mov ax, bx
       mov bl, 80
-      div bl                                    ;dx:ax/80=ax....dx， 
+      div bl                                    ;ax/bl=al....ah， 
 
       mul bl                                    ;al*bl=ax    ax是当前行的首行索引，得再乘80，才是偏移量
       mov bx, ax
@@ -112,7 +111,7 @@ SECTION sys_routine vstart=0
       mov ax, bx
       shl eax, 1                                ;乘2
       mov [esi + eax], cl    
-      add bx, 1                                 ;推进光标
+      inc bx                                    ;推进光标
 
       ;光标越界检查，是否需要滚动屏幕
    .scroll_check:
@@ -123,18 +122,20 @@ SECTION sys_routine vstart=0
    .scroll_screnn:                              ;第1行移到第0行，。。。。最后一行置空。去除最后1行，共24行，一共24*80个字符
       sub bx, 80                                ;向上移了一行，光标也需要对应移动
       ;24*80/4, [es:edi] <- [ds:esi]
-      mov ax, ds
+      mov ax, all_data_seg_sel
+      mov ds, ax
       mov es, ax
-      mov edi, 0
-      mov esi, 160
+      mov edi, 0+0xb_8000
+      mov esi, 160+0xb_8000                     ;段选择子指向的描述符基地址是0，4GB内存区域
       mov ecx, 24*80*2/4                        ;应该是字符数*2才是字节数
       cld                                       ;DF=0，edi、esi方向增加
       rep movsd                                 ;edi、esi步长是4（双字）rep movsd，32位保护模式时，使用的是ecx
       ;最后一行置空（黑底白字空格字符）
       mov ecx, 40                               ;本来是要循环160次的，但现在每次四个字节操。 TODO:Think-CPU和数据总线拥有更宽的数据通路，所执行的指令个数就会减少，充分体现了性能的优化
+      mov esi, 24*80*2
       .loop_cls:
       mov dword [esi], 0x07200720               ;在上一步rep movsd结束时，esi偏移量是24*80*2，符合预期。（行从0开始）
-      add esi, 2 
+      add esi, 4 
       loop .loop_cls        
 
       ;向外设写数据，BX=光标位置
@@ -157,15 +158,15 @@ SECTION sys_routine vstart=0
       pop es
       pop ds
 
-      pop dx
-      pop bx
-      pop ax
+      pop edx
+      pop ebx
+      pop eax
       pop esi
       pop edi
       ret
 
 
- put_string:                                    ;文本模式下格式化字符串打印
+put_string:                                    ;文本模式下格式化字符串打印
                                                 ;输入：ds:ebx字符串首地址，0x00结束
                                                 ;输出：无
       push ecx
