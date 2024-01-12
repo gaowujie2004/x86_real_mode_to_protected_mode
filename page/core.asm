@@ -50,7 +50,7 @@ SECTION header  vstart=0
 ;============================== sys_routine STR ==============================
       [bits 32]
 SECTION sys_routine vstart=0
-put_char:                                       ;打印一个字符
+ put_char:                                      ;打印一个字符
                                                 ;输入：cl=ASCII码
       push edi
       push esi
@@ -166,7 +166,7 @@ put_char:                                       ;打印一个字符
       ret
 
 
-put_string:                                    ;文本模式下格式化字符串打印
+ put_string:                                    ;文本模式下格式化字符串打印
                                                 ;输入：ds:ebx字符串首地址，0x00结束
                                                 ;输出：无
       push ecx
