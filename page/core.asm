@@ -12,20 +12,20 @@
       rtc_data_port           equ     0x71
       
       
-      all_data_seg_sel        equ     0B00000000_00001_000      ;0x08，4GB数据段选择子
-      mbr_code_seg_sel        equ     0B00000000_00010_000      ;0x10，初始化代码段（mbr）
-      core_stack_seg_sel      equ     0B00000000_00011_000      ;0x18，初始化栈段（mbr、core）
-      video_buf_seg_sel       equ     0B00000000_00100_000      ;0x20，文本模式字符缓冲区（mbr、core）
+      all_data_seg_sel        equ     0B00000000_00001_000        ;0x08，4GB数据段选择子
+      mbr_code_seg_sel        equ     0B00000000_00010_000        ;0x10，初始化代码段（mbr）
+      core_stack_seg_sel      equ     0B00000000_00011_000        ;0x18，初始化栈段（mbr、core）
+      video_buf_seg_sel       equ     0B00000000_00100_000        ;0x20，文本模式字符缓冲区（mbr、core）
 
-      sys_routine_seg_sel     equ     0B00000000_00101_000      ;0x28，内核公共代码段选择子  
-      core_data_seg_sel       equ     0B00000000_00110_000      ;0x30，内核数据段选择子 
-      core_code_seg_sel       equ     0B00000000_00111_000      ;0x38，内核代码段选择子
+      sys_routine_seg_sel     equ     0B00000000_00101_000        ;0x28，内核公共代码段选择子  
+      core_data_seg_sel       equ     0B00000000_00110_000        ;0x30，内核数据段选择子 
+      core_code_seg_sel       equ     0B00000000_00111_000        ;0x38，内核代码段选择子
 
-      app1_start_sector       equ     50                        ;用户程序1所在逻辑扇区号（LBA）
-      app2_start_sector       equ     70                        ;用户程序2所在逻辑扇区号（LBA）
+      app1_start_sector       equ     50                          ;用户程序1所在逻辑扇区号（LBA）
+      app2_start_sector       equ     70                          ;用户程序2所在逻辑扇区号（LBA）
 
 
-      idt_linear_address      equ   0x1_f000                    ;中断描述符表的起始线性地址
+      idt_linear_address      equ     0x1_f000                    ;中断描述符表的起始线性地址
 
 ;=============================== header STR =================================
 SECTION header  vstart=0
