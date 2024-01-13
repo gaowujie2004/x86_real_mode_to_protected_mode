@@ -27,6 +27,9 @@
 
       idt_linear_address      equ     0x1_f000                    ;中断描述符表的起始线性地址
 
+      pdt_physical_address    equ     0x0002_0000                 ;页目录表起始物理地址
+      one_page_table_physical_address equ     0x0002_1000         ;线性地址0-0xFFFFF对应的低端1MB物理地址，起始页表物理地址
+
 ;=============================== header STR =================================
 SECTION header  vstart=0
       ;以下是系统核心的头部，用于加载核心程序 
@@ -680,6 +683,8 @@ SECTION core_data   vstart=0
 
       msg_exception           db 0x0d,0x0a, '[exception_handler_interrupt]: hlt..', 0 
 
+      msg_flush               db 0x0d,0x0a, '[Core Task]: flush success..........', 0 
+
       cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a, 0x20,0x20,0x20,0x20, 0
       cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
 ;============================== core_data END =======================================
@@ -1232,7 +1237,100 @@ start:
       and al, 0b1111_1110                       ;1-7位保持原位，0位即从片的IR0引脚
       out 0xa1, al
 
-      sti                                       ;所有工作完成,开放外中断
+      sti                                       ;所有工作完成,开放外中断,可屏蔽外中断在mbr时已屏蔽
+
+ .page:
+      
+      ;1.先创建页目录表、页表线性地址与物理地址的映射关系。线性地址0-0xFFFFF和物理地址0-0xFFFFF的映射
+      ;页目录表起始物理地址在0x0002_0000、第一个目录项下的页表起始物理地址 0x0002_1000
+      ;1024个目录项，只使用第一个和最后一个
+      mov ebx, pdt_physical_address
+      ;目录表先清零
+      xor esi,esi  
+      mov ecx, 1024
+   .clear_pdt:
+      mov dword [es:ebx+esi], 0
+      add esi, 4
+      loop .clear_pdt                      
+   .init_pdt:
+      mov dword [es:ebx], 0x0002_1003                 ;高20是物理地址，低12是页表属性
+      mov dword [es:ebx+0xffc], 0x0002_0003           ;TODO-Tips: 自有妙用，开启分页后用于得到页目录表起始物理地址的
+
+
+      mov ebx, one_page_table_physical_address
+      xor esi, esi                              ;页表索引
+      xor edi, edi                              ;物理页地址
+   .set_page_table:
+      mov eax, edi                              ;物理页地址
+      or eax, 0x3                               ;页表项属性
+      mov [es:ebx+esi*4], eax
+      inc esi
+      add edi, 0x1000
+      cmp esi, 256
+      jl .set_page_table
+
+   .clear_page_table:                           ;清除页表剩余的表项值
+      mov dword [es:ebx+esi*4], 0                     ;P位=0，不在内存中
+      inc esi
+      cmp esi, 1024
+      jl .clear_page_table
+
+  
+   .open_page:
+      mov eax, pdt_physical_address             ;页目录表本身也是一个自然页，故其地址是4KB对齐，只有高20有用
+                                                ;低12位是属性
+      mov cr3, eax                              ;设置PDBR（页目录表基地址寄存器）物理地址
+      
+      cli                                       ;TODO-Tips: 开启分页时应该关闭外中断，为什么呢？因为修改了gdt、idt
+
+      mov eax, cr0
+      or eax, 0x8000_0000
+      mov cr0, eax                              ;开启分页功能
+
+   .high_end_virtual_memory:
+      ;将物理内存低端1MB地址映射到线性地址0x8000_0000-0x800F_FFFF，作为任务的全局空间
+      mov dword [es:0xffff_f800], 0x2000_1003   ;高20位页表物理起始地址, TODO-Tips:牛逼得很
+
+ .change_virtual_memory:
+      ;1.gdt基地址、段描述符基地址
+      sgdt [pgdt]
+      mov ebx, dword [pgdt+2]                   ;gdt起始线性地址
+
+      or dword [es:ebx+0x10+4], 0x8000_0000     ;描述符高32位，基地址高位变为1
+      or dword [es:ebx+0x18+4], 0x8000_0000     ;内核栈，向上扩展的，TODO-Tips:ESP不需要改动，因为是偏移值
+      or dword [es:ebx+0x20+4], 0x8000_0000 
+      or dword [es:ebx+0x28+4], 0x8000_0000     ;内核公共代码段
+      or dword [es:ebx+0x30+4], 0x8000_0000     ;内核数据段
+      or dword [es:ebx+0x38+4], 0x8000_0000     ;内核代码段
+
+      ;gdt起始线性地址也要改动
+      add ebx, 0x8000_0000                      ;TODO-Think: 能不能像上面那样使用 or ?我觉得可以
+      mov dword [pgdt+2], ebx
+      lgdt [pgdt]
+
+      ;2.idt基地址、idt门描述符基地址
+      sidt [pidt]
+      add dword [pidt+2], 0x8000_0000           ;IDTR用的也是高2GB虚拟线性地址
+      lidt [pidt]
+
+      jmp core_code_seg_sel:flush               ;段描述符内容改变，但CS描述符高速缓存器还没改变，需要刷新重新加载描述符
+
+
+ flush:
+      mov ax, core_data_seg_sel
+      mov ds, ax
+
+      ;es是4gb段，该描述符没有做改动
+
+      ;TODO-Tips: esp不需要改动
+      mov ax, core_stack_seg_sel
+      mov ss, ax
+
+      sti
+
+      mov ebx, msg_flush
+      call sys_routine_seg_sel:put_string
+
 
 
  .printf_cpu_info:
