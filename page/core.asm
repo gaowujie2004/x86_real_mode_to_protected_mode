@@ -1385,13 +1385,14 @@ start:
       call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
 
       cli                                       ;TODO-Tips:创建任务的过程中，关闭外中断
- .create_core_tcb:
+ .create_core_task:
+    .create_tcb:
       mov ecx, 0x46
       call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TCB起始线性地址
       call append_tcb                           ;输入：ECX
       mov esi, ecx
- ;ESI=TCB起始线性地址                              
- .create_core_tss:
+   ;ESI=TCB起始线性地址                              
+   .create_tss:
       mov ecx, 103
       mov [es:esi+0x12], ecx                    ;登记TSS界限到TCB
       inc ecx                                   ;TSS长度
@@ -1407,7 +1408,7 @@ start:
       mov word [es:ecx+96], 0                   ;LDT选择子（在GDT中）内核任务不需要，内核任务的内存描述符在GDT中安装
       mov dword [es:ecx+100], 0x0067_0000       ;0x67=I/O映射基地址，0特权级I/O读写不限制
 
- .core_tss_to_gdt:
+   .tss_to_gdt:
       mov eax, [es:esi+0x14]                    ;TSS基地址
       movzx ebx, word [es:esi+0x12]             ;TSS界限值
       mov ecx, 0x0000_8900                      ;TSS描述符属性                                 
@@ -1430,7 +1431,7 @@ start:
       call sys_routine_seg_sel:put_string
 
 
- .load_relocate_user_program:
+ .create_user_task:
       mov edi, app1_start_sector                ;用户程序LBA
       call create_user_program
 
