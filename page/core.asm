@@ -30,6 +30,9 @@
       pdt_physical_address    equ     0x0002_0000                 ;页目录表起始物理地址
       one_page_table_physical_address equ     0x0002_1000         ;线性地址0-0xFFFFF对应的低端1MB物理地址，起始页表物理地址
 
+      core_lin_alloc_at       equ     0x80100000                  ;内核中可用于分配的内存的起始线性地址
+      core_lin_tcb_addr       equ     0x8001f800                  ;内核任务TCB的高端线性地址
+
 ;=============================== header STR =================================
 SECTION header  vstart=0
       ;以下是系统核心的头部，用于加载核心程序 
@@ -419,9 +422,159 @@ SECTION sys_routine vstart=0
       popad
       retf
 
- allocate_memory:                               ;为用户程序动态分配内存
+ allocate_memory:                               ;动态分配内存，在当前任务自己的虚拟内存空间里分配的
                                                 ;输入：ECX=希望分配的字节数
-                                                ;输出：ECX=分配的内存的起始线性地址
+                                                ;输出：ECX=分配的内存的起始线性地址（当前任务自己的虚拟内存空间中的线性地址）
+      push es
+      push ds
+      push ebx
+      ;在TCB链表中找到当前任务（状态为繁忙的）TCB节点
+      ;从中取出内存分配的起始线性地址，基于这个地址开始分配内存
+
+      mov bx, core_data_seg_sel
+      mov ds, bx
+
+      mov bx, all_data_seg_sel
+      mov es, bx
+
+      mov ebx, [tcb_head]                       ;TCB第一个节点起始线性地址
+   ;一定存在繁忙的节点
+   .find_current_task_tcb:                 
+      cmp word [es:ebx+0x04], 0xffff            ;cur TCB 状态      
+      je .find_ok              
+      mov ebx, [es:ebx+0x00]                    ;cur=cur.next
+      jmp .find_current_task_tcb                
+      
+   .find_ok:
+      call sys_routine_seg_sel:task_allocate_memory
+
+   .return:
+      pop ebx
+      pop ds
+      pop es
+      retf
+
+ task_allocate_memory:                          ;为指定任务的虚拟内存空间分配内存
+                                                ;输入：EBX=指定任务的TCB节点线性地址
+                                                ;     ECX=分配的字节数
+                                                ;输出：ECX=本次分配内存的起始线性地址
+      ;从当前TCB中获取内存分配起始线性地址（这个线性地址是当前任务的虚拟内存空间的）
+      push ds
+      push eax
+
+      mov ax, all_data_seg_sel
+      mov ds, ax
+
+      push ebx                                  ;to A
+      push ecx                                  ;to B
+
+      mov ebx, [ebx+0x46]                       ;本次内存分配的起始线性地址
+      mov eax, ebx                              ;eax暂存：本次内存分配的起始线性地址
+      add ecx, ebx                              ;下一次内存分配的起始线性地址
+
+      ;将起始和结束地址，本次内存分配占用多少个物理页
+      and ebx, 0xffff_f000
+      and ecx, 0xffff_f000
+      
+   .next:
+      ;为当前线性地址安装物理页
+      call sys_routine_seg_sel:alloc_install_a_page;输入ebx
+      add ebx, 0x1000                           ;下一个物理页
+      cmp ebx, ecx
+      jle .next                                 ;当ebx、ecx在一个物理页内，此时他俩相等
+      
+   .up_align:
+      ;将下一次内存分配的起始线性地址强制按4字节对齐（32位CPU）
+      pop ecx                                   ;B，期望分配的字节数
+      mov ebx, ecx
+      and ecx, 0xffff_fffc                      ;4字节对齐意味着低两位必须是0，先让其向下4字节对齐
+      add ecx, 4
+      test ebx, 0x0000_0003                     
+      cmovz ecx, ebx                            ;等于0，即ecx本身是4字节对齐；ebx=原始ecx
+
+   .write:
+      pop ebx                                   ;A，指定任务的TCB节点线性地址
+
+      mov [ebx+0x46], ecx                       ;更新，下一次内存分配的起始线性地址
+
+      mov ecx, eax                              ;return-value: 本次内存分配的起始线性地址
+
+      pop eax
+      pop ds
+      retf
+
+ alloc_install_a_page:                          ;为一个线性地址分配一个物理页
+                                                ;并安装在当前任务的层级分页结构中（页目录表、页表中）
+                                                ;输入：EBX=页的线性地址
+                                                ;输出：无
+      push ds
+      push eax
+      push esi
+      push ecx
+
+      mov ax, all_data_seg_sel
+      mov ds, ax
+   ;判断当前线性地址是否有页目录项（是否分配页表）、页表项（是否分配物理页）；没有就分配、页表、物理页然后安装
+
+   .check_page_table:
+      ;1.当前线性地址是否分配页表
+      ;相当于把页目录表当做普通的物理页来访问，获取目录项的值，页目录表内偏移量作为页内偏移量
+      ;页目录表索引（高10位）*4 得到的是页目录表内偏移量，值是对应页表起始物理地址
+      mov esi, ebx
+      and esi, 0xffc0_0000                      ;保留高10位，其余位清零
+      shr esi, 20                               ;将高10位移到低10位（右移22位），然后乘以4（左移2位），即右移20位。页目录表内偏移量移到低12位，作为页内偏移量
+      or esi, 0xffff_f000                       ;高20位变为1，自有妙用：得到的是页目录表自身物理地址
+
+      ;检查对应的页表是否分配
+      test dword [esi], 0x0000_0001             ;目录项P位
+      jnz .check_physics_page                   ;不等于0说明分配页表了
+      ;等于0，开始分配页表并登记
+      call sys_routine_seg_sel:alloc_a_4kb_page ;物理页作为页表
+      or eax, 0x0000_0007                       ;目录项属性，0111-US-RW-P，3特权级可访问
+      mov [esi], eax                            ;登记:页目录表项中记录页表物理地址
+
+   .clear_page_table:
+      ;清空分配的页表。
+      ;这样做：把页表当做一个物理页，页目录表索引作为页表索引，这样定位到页表，把页表当做普通的物理页，变量值作为页内偏移量，就可定位到1个页表内1024个页表项
+      mov esi, ebx
+      and esi, 0xffc0_0000                      ;只留页目录表索引
+      shr esi, 10                               ;页目录表索引，变为页表索引
+      or  esi, 0xffc0_0000                      ;高10位全变为1
+      mov ecx, 1024
+    .each_clear_table_item:
+      mov dword [esi], 0
+      add esi, 4 
+      loop .each_clear_table_item
+
+
+   .check_physics_page:
+      ;2.检查该线性地址对应的页表项（物理页）是否存在
+      ;相当于把页表当做物理页，页表内偏移量作为页内偏移量访问得到物理页，最终得到页表项的值
+      mov esi, ebx
+      and esi, 0xffff_f000                      ;清除页内偏移部分
+      shr esi, 10                               ;中间10位右移12位，作为页内偏移量，但现在还是索引，需要乘以4变为偏移量（左移2两位）
+      or esi, 0xffc0_0000                       ;高10位为1
+
+      test dword [esi], 0x0000_0001             ;页表项P位
+      jnz .return                               ;不等于0说明分配物理页了
+      ;等于0，没有分配物理页，开始分配并登记（页表中登记）
+      call sys_routine_seg_sel:alloc_a_4kb_page
+      or eax, 0x0000_0007
+      mov [esi], eax                      ;登记：页表项中记录物理页的物理地址
+
+
+   .return:
+      pop ecx
+      pop esi
+      pop eax
+      pop ds
+      retf
+
+ alloc_a_4kb_page:                              ;在物理内存中分配一个4KB物理页
+                                                ;输入：无
+                                                ;输出：EAX=4KB物理页的起始物理地址
+      ;在内存中找到空闲的页，然后返回。
+      ;从头开始搜索位串，查找空闲的页。具体地说，就是找到第一个为“0”的比特，并记下它在整个位串中的位置，然后再置1
       push ds
       push eax
       push ebx
@@ -429,29 +582,26 @@ SECTION sys_routine vstart=0
       mov ax, core_data_seg_sel
       mov ds, ax
 
-      mov eax, [ram_alloc]                      ;[ram_alloc]=起始线性地址
-      mov ebx, eax                              ;ebx暂存分配的地址，最为最终结果
-      add eax, ecx                              ;eax下一次分配的起始线性地址
+      ;bts（Bit Test and Set）测试位串中的某个位置的比特，用该位置的比特值设置EFLAGS寄存器的CF标志，然后将该位置的比特置“1”。
+      ;bts r/m16, r16、bts r/m32, r32
+      xor eax, eax
+   .find_idle_position:
+      bts [page_bit_map], eax
+      jnc .ok                                   ;CF=0说明空闲，退出循环
+      ;CF=1，非空闲继续找
+      cmp eax, page_map_len*8                   ;字节数*8是比特位数
+      jl .find_idle_position
+      ;没有空闲页，正确的做法是将较少使用的页换出到硬盘，这部分页再分配给需要使用的程序
+      mov ebx, msg_not_page
+      call sys_routine_seg_sel:put_string
+      hlt
+
+   .ok:
+      shl eax, 12                               ;eax索引*4096，空闲页物理地址
       
-      mov ecx, ebx
-
-   .up_align:
-   ;强制ebx，4字节向上对齐
-      mov ebx, eax
-      and ebx, 0xffff_fffc                      ;低两位清零，向下4字节对齐
-      add ebx, 4                                ;再加上4，使ebx向上4字节对齐。比如数值5，最终向上4字节对齐就是8
-
-      test eax, 0B11                            ;若eax本身就4字节对齐，ebx的结果就大了4。
-      cmovnz eax, ebx                           ;第两位不等于0，说明eax不是4字节对齐；若等于0则不改变eax的值
-   
-   .write:
-      mov [ram_alloc], eax
-
-   .return:
-      pop ebx
+      push ebx
       pop eax
       pop ds
-      retf
 
  initiative_task_switch:                        ;主动进行任务切换
                                                 ;输入：无、 输出：无
@@ -640,6 +790,17 @@ SECTION core_data   vstart=0
 
 
       tcb_head    dd 0x0000_0000                ;任务控制块链表
+
+      page_bit_map      db  0xff,0xff,0xff,0xff,0xff,0xff,0x55,0x55
+                        db  0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff
+                        db  0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff
+                        db  0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff
+                        ;上面是低1MB物理内存的分配情况，其中0x55 0x55，这个不用担心
+                        db  0x55,0x55,0x55,0x55,0x55,0x55,0x55,0x55
+                        db  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+                        db  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+                        db  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+      page_map_len      equ $-page_bit_map
       ;-------------------------SALT--------------------
       salt:
       salt_1      db '@put_string'
@@ -685,6 +846,8 @@ SECTION core_data   vstart=0
 
       msg_flush               db 0x0d,0x0a, '[Core Task]: flush success..........', 0 
 
+      msg_not_page            db 0x0d,0x0a, '[Sys]: ********No more pages********', 0
+
       cpu_brand0              db 0x0d,0x0a, 'Down is cpu brand info:', 0x0d,0x0a, 0x20,0x20,0x20,0x20, 0
       cpu_brand               times 49 db 0,                ;存放cpuinfo需48byte，额外的结束0，共49byte
 ;============================== core_data END =======================================
@@ -698,6 +861,9 @@ SECTION core_code   vstart=0
       push es
       push eax
       push ebx
+      pushf
+
+      cli                                       ;防止在添加任务的时候，进行任务切换（时钟1秒切换一次）
 
    ;ds=core_data、es=4GB
    .seg:
@@ -728,6 +894,8 @@ SECTION core_code   vstart=0
       mov [tcb_head], ecx
 
    .ref:
+      sti
+      popf
       pop ebx
       pop eax
       pop es
@@ -1387,8 +1555,9 @@ start:
       cli                                       ;TODO-Tips:创建任务的过程中，关闭外中断
  .create_core_task:
     .create_tcb:
-      mov ecx, 0x46
-      call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TCB起始线性地址
+      mov ecx, core_lin_tcb_addr                ;TCB分配改为手动分配，不使用动态分配
+      mov word [es:ecx+0x04], 0xffff            ;TCB状态繁忙，该内核任务即将被运行
+      mov dword [es:ecx+0x46],core_lin_alloc_at ;登记内核中可用于分配的起始线性地址
       call append_tcb                           ;输入：ECX
       mov esi, ecx
    ;ESI=TCB起始线性地址                              
@@ -1399,12 +1568,12 @@ start:
       call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TSS起始线性地址
       
       mov [es:esi+0x14], ecx                    ;登记TSS基地址到TCB
-      mov word [es:esi+0x04], 0xffff            ;登记任务状态到TCB（繁忙）即该TCB接下来即将被运行
       
       ;初始化TSS各个字段
       mov word [es:ecx+0], 0                    ;上一个任务的TSS选择子（现代操作系统不使用）
       ;0特权级的内核任务不需要不同的特权级栈（不能call到低特权级任务）
-      mov dword [es:ecx+28], 0                  ;CR3
+      mov eax, cr3
+      mov dword [es:ecx+28], eax                ;登记CR3(PDBR页目录表基地址)
       mov word [es:ecx+96], 0                   ;LDT选择子（在GDT中）内核任务不需要，内核任务的内存描述符在GDT中安装
       mov dword [es:ecx+100], 0x0067_0000       ;0x67=I/O映射基地址，0特权级I/O读写不限制
 
