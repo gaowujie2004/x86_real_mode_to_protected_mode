@@ -602,7 +602,48 @@ SECTION sys_routine vstart=0
       push ebx
       pop eax
       pop ds
+      ret
 
+ create_copy_cur_pdir:                          ;创建用户任务页目录表
+                                                ;输入：无
+                                                ;输出: EAX=新页目录表的物理地址
+      ;把内核的页目录表的内容复制给一块新的内存，并返回这块内存的物理地址
+      push esi
+      push edi
+      push ecx
+      push ebx
+      push ds
+      push es
+
+      mov ax, all_data_seg_sel
+      mov ds, ax
+      mov es, ax
+
+      call alloc_a_4kb_page ;EAX=新页目录表起始物理地址
+      mov ebx, eax                              ;此线性地址对应当前(core)任务页目录表倒数第二个目录项
+      or ebx, 0x0000_0007                       ;0111，US、RW、P
+      mov [0xfffff_ff8], ebx                    ;EBX高20位=新页目录表起始物理地址
+                                                ;TODO-Think: 这是什么意思？分页模式下即便知道物理地址也不能直接访问，需要通过迂回的方式访问
+
+      invlpg [0xfffff_ff8]                      ;刷新0xfffff_ff8线性地址在TLB中对应的条目，在内存中修改了，但在TLB中是不同步的，需手动刷新
+
+      ;[es:edi] <- [ds:esi]
+      ;把内核的页目录表内容复制到新的页目录表
+      mov edi, 0xffff_e000                      ;该线性地址对应新的页目录起始位置
+      mov esi, 0xffff_f000                      ;该线性地址对应内核页目录表起始位置，该线性地址低12位就是目录表内的偏移量
+      mov ecx, 1024                             ;表目录项个数
+      cld                                       
+      rep movsd                                 ;mov dword [es:edi], [ds:esi]
+
+      pop es
+      pop ds
+      pop ebx
+      pop ecx
+      pop edi
+      pop esi
+      retf
+ 
+ 
  initiative_task_switch:                        ;主动进行任务切换
                                                 ;输入：无、 输出：无
       ;怎么进行任务切换？从TCB链表找到繁忙的任务，即当前调用initiative_task_switch的任务的tcb，从这个tcb开始向后找一个空闲的tcb
@@ -956,13 +997,28 @@ SECTION core_code   vstart=0
       ;esi=tcb起始线性地址
       mov esi, [ss:ebp+11*4]  
 
+      ;TODO-Think: why? 假定以前创建过用户任务。此时内核任务页目录表的前半部分是有内容的，还保留着前一个用户任务的相关表项。
+      ;如果不清除，那么，在内存分配的时候，内存分配例程会以为以前已经分配过，会使用前一个用户任务的相关物理页
+      mov ebx, 0xffff_f000                      ;可定位到页目录表自身（把页目录表当做物理页）
+      mov ecx, 512                              ;页目录表共1024个目录项，只清空0-2GB
+   .clear:
+      mov dword [es:ebx], 0
+      add ebx, 4
+      loop .clear
+      
+   .flush_tlb:
+      mov eax, cr3
+      mov cr3, eax
+
+   ;ESI=TCB
    .ldt:             
       mov ecx, 160                              ;为用户程序的LDT分配20个描述符
-      call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
+      mov ebx, esi                              ;TCB起始线性地址
+      call sys_routine_seg_sel:task_allocate_memory  ;ecx=分配内存的起始线性地址
 
-      ;放入tcb中
+      ;LDT登记到TCB
       mov dword [es:esi+0x0c], ecx              ;LDT起始线性地址
-      mov word [es:esi+0x0a], 0xffff            ;LDT段界限
+      mov word [es:esi+0x0a], 0xffff            ;LDT段界限，0-1=0xffff 16位存储
                                                 ;与GDT格式完全一样
    .get_user_program_size:
       mov eax, [ss:ebp+12*4]                    ;用户程序起始逻辑扇区号
@@ -977,10 +1033,11 @@ SECTION core_code   vstart=0
       test eax,0x0000_01ff                      ;eax原先是不是512字节对齐？只test低9位
       cmovnz eax, ebx                           ;低9位不是0说明不是512对齐，使用对齐结果
 
-   .allocate_memory:                           
+   .task_allocate_memory:                           
       mov ecx, eax                              ;实际需要申请的内存数量(字节单位)
-      ;输入ecx=预期分配的字节数、输出：ecx=分配的内存起始线性地址
-      call sys_routine_seg_sel:allocate_memory
+      mov ebx, esi                              ;TCB起始线性地址
+      ;输入ecx=预期分配的字节数、ebx=tcb起始线性地址；输出：ecx=分配的内存起始线性地址
+      call sys_routine_seg_sel:task_allocate_memory
       mov ebx, ecx                              ;暂存分配的线性地址
 
       ;用户程序起始线性地址登记到tcb
@@ -1114,7 +1171,7 @@ SECTION core_code   vstart=0
    
    ;DS=core_data、ES=4GB、ESI=TCB起始线性地址
    .create_PL_stack:                            ;创建不同特权级的栈段，放在LDT中
-      mov esi, [ss:ebp+11*4]                    ;tcb起始线性地址
+      mov esi, [ss:ebp+11*4]                    ;TCB起始线性地址
       
       ;创建0特权级栈_4kb长度，并登记到TCB
       mov ecx, 0
@@ -1122,7 +1179,9 @@ SECTION core_code   vstart=0
       inc ecx
       shl ecx, 12                               ;栈实际所占字节数(4KB对齐)
       push ecx
-      call sys_routine_seg_sel:allocate_memory  ;输入ecx（希望分配字节数）、输出ecx（分配内存的起始线性地址）
+      mov ebx, esi
+      call sys_routine_seg_sel:task_allocate_memory 
+                                                ;输入ecx=分配字节数、ebx=TCB；输出ecx=分配的内存的起始线性地址
       mov [es:esi+0x1e], ecx                    ;0特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
       ;栈内存段在LDT中安装
       mov eax, ecx                              ;栈内存基地址
@@ -1142,7 +1201,9 @@ SECTION core_code   vstart=0
       inc ecx
       shl ecx, 12                               ;栈实际所占字节数(4KB对齐)
       push ecx
-      call sys_routine_seg_sel:allocate_memory  ;输入ecx（希望分配字节数）、输出ecx（分配内存的起始线性地址）
+      mov ebx, esi
+      call sys_routine_seg_sel:task_allocate_memory  
+                                                ;输入ecx=分配字节数、ebx=TCB；输出ecx=分配的内存的起始线性地址
       mov [es:esi+0x2c], ecx                    ;1特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
       ;栈内存段在LDT中安装
       mov eax, ecx                              ;栈段基地址
@@ -1161,7 +1222,9 @@ SECTION core_code   vstart=0
       inc ecx
       shl ecx, 12                               ;栈实际所占字节数(4KB对齐)
       push ecx
-      call sys_routine_seg_sel:allocate_memory  ;输入ecx（希望分配字节数）、输出ecx（分配内存的起始线性地址）
+      mov ebx, esi
+      call sys_routine_seg_sel:task_allocate_memory 
+                                                ;输入ecx=分配字节数、ebx=TCB；输出ecx=分配的内存的起始线性地址
       mov [es:esi+0x3a], ecx                    ;1特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
       ;栈内存段在LDT中安装
       mov eax, ecx                              ;栈段基地址
@@ -1188,7 +1251,7 @@ SECTION core_code   vstart=0
       dec ecx
       mov [es:esi+0x12], cx                     ;登记到TCB，TSS段界限（16位）
       inc ecx
-      call sys_routine_seg_sel:allocate_memory
+      call sys_routine_seg_sel:allocate_memory  ;当前任务是内核，用户任务TSS分配在内核空间中
       mov [es:esi+0x14], ecx                    ;登记到TCB，TSS起始线性地址
 
       ;ECX=TSS起始线性地址
@@ -1275,6 +1338,10 @@ SECTION core_code   vstart=0
       mov [es:esi+0x18], cx                     ;登记TSS选择子到TCB，PRL=00， CPL&RPL <=0 才能访问该数据段。
                                                 ;TODO-Tips：从这里也能看出，RPL是由操作系统控制的，CPU只负责检查RPL与CPL的合法性，不负责鉴别PRL的真实性，真实性由操作系统鉴别。
       
+   .create_user_page_dir:                       ;创建用户任务页目录表
+      call sys_routine_seg_sel:create_copy_cur_pdir
+      mov ebx, [es:esi+0x14]                    ;ESI=TCB起始线性地址，TSS起始线性地址
+      mov [es:ebx+28], eax                      ;TSS.CR3
 
    .return:
       pop es
@@ -1287,10 +1354,17 @@ SECTION core_code   vstart=0
                                                 ;输出：无
       push ecx
       push ebx
+      push es
+
+      mov cx, all_data_seg_sel
+      mov es, cx
 
    .create_tcb:
-      mov ecx, 0x46                             ;tcb size
-      call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址
+      mov ecx, 0x4a                             ;tcb size
+      call sys_routine_seg_sel:allocate_memory  ;ecx=分配内存的起始线性地址，TCB
+      mov dword [es:ecx+0x46], 0                ;用户任务虚拟内存空间中，下一个用于内存分配的起始线性地址
+                                                ;低2GB是任务的私有空间
+      mov word [es:ecx+0x04], 0                 ;TCB状态，空闲
       call append_tcb
 
    .load_relocate:
@@ -1302,6 +1376,7 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:put_string
    
    .return:
+      pop es
       pop ebx
       pop ecx
       ret
@@ -1551,9 +1626,10 @@ start:
    .test_call_gate:
       mov ebx, msg_test_call_gate
       call far [salt_1 + 256]                     ;最终发现选择子选择的是门描述符，丢弃偏移量，使用门描述符中的信息。
-
-      cli                                       ;TODO-Tips:创建任务的过程中，关闭外中断
+      
  .create_core_task:
+      cli                                       ;TODO-Tips:创建任务的过程中，关闭外中断
+
     .create_tcb:
       mov ecx, core_lin_tcb_addr                ;TCB分配改为手动分配，不使用动态分配
       mov word [es:ecx+0x04], 0xffff            ;TCB状态繁忙，该内核任务即将被运行
