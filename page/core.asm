@@ -1302,8 +1302,8 @@ SECTION core_code   vstart=0
       call sys_routine_seg_sel:put_string
    
    .return:
-      pop ecx
       pop ebx
+      pop ecx
       ret
  ;------------------------------------------------------------
  ;DS=core_data、ES=4GB
