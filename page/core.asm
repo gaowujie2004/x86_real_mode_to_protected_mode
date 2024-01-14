@@ -1295,7 +1295,7 @@ SECTION core_code   vstart=0
 
    .load_relocate:
       push dword edi
-      push ecx                                  ;ecx=分配内存的起始线性地址、也等于当前tcb起始线性地址
+      push ecx                                  ;ecx=当前用户任务TCB起始线性地址
       call load_relocate_user_program
 
       mov ebx, msg_load_relocate_ok
