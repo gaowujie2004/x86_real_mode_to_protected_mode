@@ -111,13 +111,12 @@ SECTION sys_routine vstart=0
 
       ;可显示的字符，cl=字符值
    .put_other:               
-      mov ax, all_data_seg_sel
+      mov ax, video_buf_seg_sel
       mov ds, ax                     
-      mov esi, 0xb_8000
-      xor eax, eax                              ;eax的高位可能不干净，清楚
+      xor eax, eax                              
       mov ax, bx
       shl eax, 1                                ;乘2
-      mov [esi + eax], cl    
+      mov [eax], cl    
       inc bx                                    ;推进光标
 
       ;光标越界检查，是否需要滚动屏幕
@@ -129,11 +128,11 @@ SECTION sys_routine vstart=0
    .scroll_screnn:                              ;第1行移到第0行，。。。。最后一行置空。去除最后1行，共24行，一共24*80个字符
       sub bx, 80                                ;向上移了一行，光标也需要对应移动
       ;24*80/4, [es:edi] <- [ds:esi]
-      mov ax, all_data_seg_sel
+      mov ax, video_buf_seg_sel
       mov ds, ax
       mov es, ax
-      mov edi, 0+0xb_8000
-      mov esi, 160+0xb_8000                     ;段选择子指向的描述符基地址是0，4GB内存区域
+      mov edi, 0
+      mov esi, 160                              ;段选择子指向的描述符基地址是0，4GB内存区域
       mov ecx, 24*80*2/4                        ;应该是字符数*2才是字节数
       cld                                       ;DF=0，edi、esi方向增加
       rep movsd                                 ;edi、esi步长是4（双字）rep movsd，32位保护模式时，使用的是ecx
@@ -393,14 +392,15 @@ SECTION sys_routine vstart=0
  
  clear:                                         ;清除屏幕字符
       pushad
+      push ds
 
-      mov ax, all_data_seg_sel
+      mov ax, video_buf_seg_sel
       mov ds, ax
-      mov edi, 0xb_8000
-      mov ecx, 1000                             ;200*2/4
+      mov edi, 0
+      mov ecx, 1000                             ;2000*2/4
    .loop_clear:
       mov dword [edi], 0x0720_0720              ;0B0000_0111=0x07
-      add edi, 2
+      add edi, 4
       loop .loop_clear
 
    .rest_cursor:
@@ -419,6 +419,7 @@ SECTION sys_routine vstart=0
       out dx, al
 
    .return:
+      pop ds
       popad
       retf
 
@@ -1381,6 +1382,7 @@ SECTION core_code   vstart=0
       push ecx                                  ;ecx=当前用户任务TCB起始线性地址
       call load_relocate_user_program
 
+      xchg bx, bx
       mov ebx, msg_load_relocate_ok
       call sys_routine_seg_sel:put_string
    
@@ -1509,6 +1511,9 @@ start:
       mov dword [es:ebx+0xffc], 0x0002_0003           ;TODO-Tips: 自有妙用，开启分页后用于得到页目录表起始物理地址的
 
 
+      ;物理地址0-0xfffff映射虚拟地址0-0xfffff
+      ;即低端1MB内存的线性地址与物理地址相同
+      ;TODO-Tips: 注意-该部分映射管线会被用户加载函数清空
       mov ebx, one_page_table_physical_address
       xor esi, esi                              ;页表索引
       xor edi, edi                              ;物理页地址
@@ -1550,7 +1555,7 @@ start:
 
       or dword [es:ebx+0x10+4], 0x8000_0000     ;描述符高32位，基地址高位变为1
       or dword [es:ebx+0x18+4], 0x8000_0000     ;内核栈，向上扩展的，TODO-Tips:ESP不需要改动，因为是偏移值
-      or dword [es:ebx+0x20+4], 0x8000_0000 
+      or dword [es:ebx+0x20+4], 0x8000_0000     ;文本模式显示缓冲区
       or dword [es:ebx+0x28+4], 0x8000_0000     ;内核公共代码段
       or dword [es:ebx+0x30+4], 0x8000_0000     ;内核数据段
       or dword [es:ebx+0x38+4], 0x8000_0000     ;内核代码段
@@ -1649,7 +1654,6 @@ start:
       mov ecx, 103
       mov [es:esi+0x12], ecx                    ;登记TSS界限到TCB
       inc ecx                                   ;TSS长度
-      xchg bx, bx
       call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TSS起始线性地址
       
       mov [es:esi+0x14], ecx                    ;登记TSS基地址到TCB
