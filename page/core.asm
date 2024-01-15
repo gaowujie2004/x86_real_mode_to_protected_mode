@@ -466,11 +466,12 @@ SECTION sys_routine vstart=0
       mov ds, ax
 
       push ebx                                  ;to A
-      push ecx                                  ;to B
 
       mov ebx, [ebx+0x46]                       ;本次内存分配的起始线性地址
       mov eax, ebx                              ;eax暂存：本次内存分配的起始线性地址
       add ecx, ebx                              ;下一次内存分配的起始线性地址
+
+      push ecx                                  ;to B，下一次内存分配的起始线性地址
 
       ;将起始和结束地址，本次内存分配占用多少个物理页
       and ebx, 0xffff_f000
@@ -483,9 +484,9 @@ SECTION sys_routine vstart=0
       cmp ebx, ecx
       jle .next                                 ;当ebx、ecx在一个物理页内，此时他俩相等
       
-   .up_align:
+   .force_align:
       ;将下一次内存分配的起始线性地址强制按4字节对齐（32位CPU）
-      pop ecx                                   ;B，期望分配的字节数
+      pop ecx                                   ;B，下一次内存分配的起始线性地址
       mov ebx, ecx
       and ecx, 0xffff_fffc                      ;4字节对齐意味着低两位必须是0，先让其向下4字节对齐
       add ecx, 4
@@ -576,7 +577,6 @@ SECTION sys_routine vstart=0
       ;在内存中找到空闲的页，然后返回。
       ;从头开始搜索位串，查找空闲的页。具体地说，就是找到第一个为“0”的比特，并记下它在整个位串中的位置，然后再置1
       push ds
-      push eax
       push ebx
 
       mov ax, core_data_seg_sel
@@ -589,6 +589,7 @@ SECTION sys_routine vstart=0
       bts [page_bit_map], eax
       jnc .ok                                   ;CF=0说明空闲，退出循环
       ;CF=1，非空闲继续找
+      inc eax
       cmp eax, page_map_len*8                   ;字节数*8是比特位数
       jl .find_idle_position
       ;没有空闲页，正确的做法是将较少使用的页换出到硬盘，这部分页再分配给需要使用的程序
@@ -599,8 +600,7 @@ SECTION sys_routine vstart=0
    .ok:
       shl eax, 12                               ;eax索引*4096，空闲页物理地址
       
-      push ebx
-      pop eax
+      pop ebx
       pop ds
       ret
 
@@ -781,9 +781,20 @@ SECTION sys_routine vstart=0
       iretd
 
  inside_interrupt_handle:                       ;通用的异常处理(内中断)过程
-         mov ebx, msg_enter_core
-         call sys_routine_seg_sel:put_string
-         hlt
+      push eax
+      push ebx
+      push ds
+
+      mov ax, core_data_seg_sel
+      mov ds, ax
+      mov ebx, msg_exception
+      call sys_routine_seg_sel:put_string
+      hlt
+
+      pop ds
+      pop ebx
+      pop eax
+      iret
 
  rtc_0x70_interrupt_handle:                     ;实时时钟RTC外中断
       push eax
@@ -805,8 +816,6 @@ SECTION sys_routine vstart=0
       mov ebx, msg_0x70_interrupt
       call sys_routine_seg_sel:put_string
 
-
-      xchg bx, bx
       call sys_routine_seg_sel:initiative_task_switch
       
       pop ds
@@ -1532,12 +1541,12 @@ start:
 
    .high_end_virtual_memory:
       ;将物理内存低端1MB地址映射到线性地址0x8000_0000-0x800F_FFFF，作为任务的全局空间
-      mov dword [es:0xffff_f800], 0x2000_1003   ;高20位页表物理起始地址, TODO-Tips:牛逼得很
+      mov dword [es:0xffff_f800], 0x0002_1003   ;高20位页表物理起始地址, TODO-Tips:牛逼得很
 
  .change_virtual_memory:
       ;1.gdt基地址、段描述符基地址
       sgdt [pgdt]
-      mov ebx, dword [pgdt+2]                   ;gdt起始线性地址
+      mov ebx, [pgdt+2]                         ;gdt起始线性地址
 
       or dword [es:ebx+0x10+4], 0x8000_0000     ;描述符高32位，基地址高位变为1
       or dword [es:ebx+0x18+4], 0x8000_0000     ;内核栈，向上扩展的，TODO-Tips:ESP不需要改动，因为是偏移值
@@ -1547,8 +1556,7 @@ start:
       or dword [es:ebx+0x38+4], 0x8000_0000     ;内核代码段
 
       ;gdt起始线性地址也要改动
-      add ebx, 0x8000_0000                      ;TODO-Think: 能不能像上面那样使用 or ?我觉得可以
-      mov dword [pgdt+2], ebx
+      add dword [pgdt+2], 0x8000_0000           ;TODO-Think: 能不能像上面那样使用 or ?我觉得可以
       lgdt [pgdt]
 
       ;2.idt基地址、idt门描述符基地址
@@ -1670,7 +1678,7 @@ start:
       ;任务寄存器TR中的内容是任务存在的标志，该内容也决定了当前任务是谁。
       ;下面的指令为当前正在执行的0特权级任务“程序管理器”后补手续（TSS）。
       ;当前任务是内核任务，TR指向内核任务的TSS
-      ltr cx                                    
+      ltr cx                                 
 
       mov ebx, msg_core_task_run
       call sys_routine_seg_sel:put_string
