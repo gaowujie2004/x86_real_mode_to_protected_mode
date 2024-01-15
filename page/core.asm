@@ -530,7 +530,7 @@ SECTION sys_routine vstart=0
       test dword [esi], 0x0000_0001             ;目录项P位
       jnz .check_physics_page                   ;不等于0说明分配页表了
       ;等于0，开始分配页表并登记
-      call sys_routine_seg_sel:alloc_a_4kb_page ;物理页作为页表
+      call alloc_a_4kb_page ;物理页作为页表
       or eax, 0x0000_0007                       ;目录项属性，0111-US-RW-P，3特权级可访问
       mov [esi], eax                            ;登记:页目录表项中记录页表物理地址
 
@@ -559,7 +559,7 @@ SECTION sys_routine vstart=0
       test dword [esi], 0x0000_0001             ;页表项P位
       jnz .return                               ;不等于0说明分配物理页了
       ;等于0，没有分配物理页，开始分配并登记（页表中登记）
-      call sys_routine_seg_sel:alloc_a_4kb_page
+      call alloc_a_4kb_page
       or eax, 0x0000_0007
       mov [esi], eax                      ;登记：页表项中记录物理页的物理地址
 
@@ -1649,6 +1649,7 @@ start:
       mov ecx, 103
       mov [es:esi+0x12], ecx                    ;登记TSS界限到TCB
       inc ecx                                   ;TSS长度
+      xchg bx, bx
       call sys_routine_seg_sel:allocate_memory  ;输出：ECX=TSS起始线性地址
       
       mov [es:esi+0x14], ecx                    ;登记TSS基地址到TCB
