@@ -3,7 +3,7 @@
 SECTION header  vstart=0
       
       program_length   dd file_end              ;程序总长度#0x00
-      entry_point      dd start                ;程序入口点#0x04
+      entry_point      dd start                 ;程序入口点#0x04
 ;=============================== header END ===============================
 
 
