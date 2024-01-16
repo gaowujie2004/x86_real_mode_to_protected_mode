@@ -9,7 +9,7 @@ SECTION header  vstart=0
 
       [bits 32]  
 ;=============================== data STA =================================
-SECTION data vstart=0
+SECTION data vfollows=header
       msg_start         db 0x0d,0x0a, 0x20,0x20,0x20,0x20, '[App-1]: 1111',0
       buffer            times 1024 db  0
 
@@ -17,34 +17,13 @@ SECTION data vstart=0
 ;=============================== data END =================================
 
 
-
-;=============================== stack STA ================================
-SECTION stack vstart=0
-      times 2048 db 0xa0
-      stack_end:
-;=============================== stack END ================================
-
-
-
-
-
 ;=============================== code STA =================================
-SECTION code vstart=0
+SECTION code vfollows=data
  start:
-      mov ax, ds                                ;ds=头部段
-      mov fs, ax
-      mov gs, ax
-
-      mov ax, [fs:0x14]
-      mov ds, ax
-
-      mov ax, [fs:0x1c]
-      mov ss, ax
-      mov esp, stack_end
-
    .for_printf:
       mov ebx, msg_start
-      call far [fs:PrintfString]                ;间接远调用，必须要指定far
+      mov eax, 0
+      int 0x88
       jmp .for_printf
 
 
