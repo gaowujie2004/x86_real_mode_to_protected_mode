@@ -29,10 +29,10 @@
       app2_start_sector       equ     70                          ;用户程序2所在逻辑扇区号（LBA）
 
 
-      idt_linear_address      equ     0x1_f000                    ;中断描述符表的起始线性地址
+      idt_linear_address      equ     0x8001_f000                 ;中断描述符表的起始线性地址
 
-      core_lin_alloc_at       equ     0x80100000                  ;内核中可用于分配的内存的起始线性地址
-      core_lin_tcb_addr       equ     0x8001f800                  ;内核任务TCB的高端线性地址
+      core_lin_alloc_at       equ     0x8010_0000                 ;内核中可用于分配的内存的起始线性地址
+      core_lin_tcb_addr       equ     0x8001_f800                 ;内核任务TCB的高端线性地址
 
 ;=============================== header STR =================================
 SECTION header vstart=0x8004_0000
@@ -728,6 +728,12 @@ SECTION sys_routine vfollows=header
       pop eax
       iret
 
+ sys_call_0x88_interrupt_handle:                ;系统调用中断处理程序，软中断
+                                                ;输入：EAX=功能号（0-3）
+      call [sys_api+eax*4]                      ;间接近调用，EIP <- M[地址]
+                                                ;sys_api相当于数组名（数字起始地址）、eax是数组索引、*4得到在数组内的偏移量
+      iret
+
 ;============================== sys_routine END =====================================
 
 
@@ -755,6 +761,13 @@ SECTION core_data vfollows=sys_routine
                         db  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
                         db  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
       page_map_len      equ $-page_bit_map
+
+      ;----------------------------------系统api-----------
+      sys_api           dd put_string
+                        dd read_disk_hard_0
+                        dd clear
+                        dd allocate_memory
+      ;----------------------------------系统api-----------
 
       msg_enter_core          db            'Core enter success................', 0
       msg_load_relocate_ok    db 0x0d,0x0a, '[Core Task]: User program load relocate success', 0
@@ -1184,8 +1197,7 @@ SECTION core_code vfollows=core_data
       pop ebx
       pop ecx
       ret
- ;------------------------------------------------------------
- ;DS=core_data、ES=4GB
+ ;------------------------------------------------------------  
 start:
       call clear
 
@@ -1197,8 +1209,8 @@ start:
       ;IDT描述符安装完成后，开始加载IDTR，让IDTR48位寄存器保存IDT起始线性地址&界限
  .inside_interrupt:
       mov eax, inside_interrupt_handle          ;目标代码段32位偏移地址
-      mov bx, sys_routine_seg_sel               ;目标代码段选择子
-      mov cx, 0x8e00                            ;门描述符(中断门)属性
+      mov bx, flat_core_code_seg_sel            ;目标代码段选择子
+      mov cx, 0x8e00                            ;中断门描述符属性，0特权级
       call make_gate_descriptor
       
       mov ebx, idt_linear_address
@@ -1211,9 +1223,9 @@ start:
       jle .for_inside_install
   
  .external_interrupt:
-      mov eax, external_interrupt_handle
-      mov bx, sys_routine_seg_sel
-      mov cx, 0x8e00                            ;中断门描述符属性 
+      mov eax, external_interrupt_handle        ;目标代码段32位偏移地址
+      mov bx, flat_core_code_seg_sel            ;目标代码段选择子
+      mov cx, 0x8e00                            ;中断门描述符属性，0特权级
       call make_gate_descriptor
 
       mov ebx, idt_linear_address
@@ -1225,15 +1237,26 @@ start:
       jle .for_install_external                 ;edi<=255,则循环
  
  .0x70_external_interrupt:
-      mov eax, rtc_0x70_interrupt_handle
-      mov bx, sys_routine_seg_sel
-      mov cx, 0x8e00                            ;中断门描述符属性 
+      mov eax, rtc_0x70_interrupt_handle        ;目标代码段32位偏移地址
+      mov bx, flat_core_code_seg_sel            ;目标代码段选择子
+      mov cx, 0x8e00                            ;中断门描述符属性，0特权级
       call make_gate_descriptor
 
       mov ebx, idt_linear_address
       mov [ebx+0x70*8], eax
       mov [ebx+0x70*8+4], edx
  
+ .sys_call_0x88_interrupt:                      ;系统调用中断门描述符
+      mov eax, sys_call_0x88_interrupt_handle   ;目标代码段32位偏移地址
+      mov bx, flat_core_code_seg_sel            ;目标代码段选择子
+      mov cx, 0xee00                            ;中断门描述符属性，3特权级！！！（用户程序 int 0x88）
+      call make_gate_descriptor
+
+      mov ebx, idt_linear_address
+      mov [ebx+0x88*8], eax
+      mov [ebx+0x88*8+4], edx
+
+
  .load_idt:
       mov word [pidt], 256*8-1                  ;长度(字节数)-1
       mov dword [pidt+2], idt_linear_address
