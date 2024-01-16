@@ -579,7 +579,10 @@ SECTION sys_routine vfollows=header
       ;若向后找不到，则从头开始找，都没找到就退出，任务不切换；若找到了，则把找到的空闲节点的状态反转（变为0xffff，即将开始运行这个任务）
       ;将旧任务（当前任务）的tcb状态也反转一下，变为0，表示空闲。
       ;jmp far 指向tss选择子，即可由硬件完成任务切换
-      pusha
+      push eax
+      push ebx
+      push esi
+      push edi
 
       ;0个任务或1个任务
       mov eax, [tcb_head]
@@ -630,13 +633,96 @@ SECTION sys_routine vfollows=header
    .ok:
       not word [esi+0x04]                       ;将旧任务TCB状态改为空闲
       not word [edi+0x04]                       ;将空闲任务TCB改为忙,即将切换到该任务
-      jmp far [edi+0x14]                        ;CPU硬件任务切换
-      ;EDI=空闲TCB即即将要切换到该任务执行
+
+   ;保存旧任务（当前任务）的状态
+   .save_old_task_info:                   
+      mov eax, cr3
+      mov [esi+22], eax                         ;TCB.CR3
+      mov dword [esi+26], .return               ;TCB.EIP，TODO-Tips: 很重要
+      mov [esi+30], cs                          ;TCB.CS
+      mov [esi+32], ss                          ;TCB.SS
+      mov [esi+34], ds                          ;TCB.DS
+      mov [esi+36], es                          ;TCB.ES
+      mov [esi+38], fs                          ;TCB.FS
+      mov [esi+40], gs                          ;TCB.GS
+      
+      ;TODO-Think: 不理解。EAX/EBX/ESI/EDI不用保存，在任务恢复执行时将自动从栈中弹出并恢复
+      ;TODO-Think: 用户任务进入该函数内，SS、ESP变为0特权级栈（用户局部内存空间）
+
+      mov [esi+50], ecx                         ;TCB.ECX
+      mov [esi+54], edx                         ;TCB.EDX
+      mov [esi+66], ebp                         ;TCB.EBP
+      mov [esi+70], esp                         ;TCB.ESP
+      pushf
+      pop dword [esi+74]                        ;TCB.EFLAGS
+
+   .resume_task_execute:
+      jmp resume_task_execute                   ;TODO-Think: 可以用call吗？
+      
 
    .return:
-      popa
+      pop edi
+      pop esi
+      pop ebx
+      pop eax
       ret
 
+ resume_task_execute:                           ;恢复指定(新)任务的执行
+                                                ;输入：EDI=指定任务TCB线性起始地址
+                                                ;输出：无
+      ;将指定任务的状态从TCB恢复到寄存器
+      ;TODO-BuDong: 不理解
+      mov eax, [edi+10]                         ;ESP0
+      mov [tss+4], eax                          ;新任务的0特权级ESP
+                                                ;TSS.SS0=flat_core_data_seg_sel。创建内核时已设置
+
+      ;新任务是内核任务：TCB.CS.DPL=0，不进行栈切换（不改变SS、ESP）
+      ;新任务是用户任务（从未运行过的）：TCB.CS.DPL=3，则进行栈切换，将从栈中恢复3特权级栈
+      ;新任务是用户任务（以前运行过）：TCB.CS.DPL=0，为什么是0？当前函数的调用者是0x70中断处理程序，它是内核空间下，故CS.DPL=0，或者说SS.DPL=0
+                                                
+                                                
+      mov eax, [edi+22]                         ;TCB.CR3
+      mov cr3, eax
+
+      mov ds, [edi + 34]
+      mov es, [edi + 36]
+      mov fs, [edi + 38]
+      mov gs, [edi + 40]
+      mov eax, [edi + 42]
+      mov ebx, [edi + 46]
+      mov ecx, [edi + 50]
+      mov edx, [edi + 54]
+      mov esi, [edi + 58]
+      mov ebp, [edi + 66]
+
+      cmp word [edi+30], 3                      ;TCB.CS.DPL == 3? 和比较TCB.SS是一样的
+      je .stack_switch                          ;新任务CS.DPL=3，意味着栈切换了，执行ret、iret时会将栈中旧的SS、ESP弹栈，赋值给SS、ESP寄存器
+      ;CPL==TCB.SS.DPL==0，可以直接切换栈，因为CPL==栈DPL。CPU要求时时刻刻CPL==SS.DPL
+      mov ss, [edi+32]                          ;TCB.SS  0特权级栈
+      mov esp, [edi+70]                         ;TCB.ESP 0特权级栈
+
+   .stack_switch:
+      ;新任务的CS.DPL=3，模拟栈切换返回过程
+      push word [edi+32]                        ;TCB.SS   3特权级
+      push dword [edi+70]                       ;TCB.ESP  3特权级
+      
+   .do_sw:
+      ;无论push的是word还是dword，实际压栈的还是dword大小的数据，不足dword自动补零
+      push dword [edi+74]                       ;TCB.EFLAGS
+      push word  [edi+30]                       ;TCB.CS
+      push dword [edi+26]                       ;TCB.EIP                                     
+
+      mov edi, [edi+62]
+
+      iret
+      ;栈切换
+      ;jmp、call、ret、iret CPU固件会比较CPL和CS.DPL（目标，即将执行的代码段）
+      ;若一样，则不切换栈（不改变SS、ESP）；若不一样，则发生栈切换，具体过程如下：
+      ;1. 目标CS.DPL在当前TSS中选择同特权级的栈（同特权级的SS、ESP）
+      ;2. 临时保存旧的SS、ESP
+      ;3. 改变SS、ESP寄存器为TSS中同特权级的栈
+      ;4. 将旧的SS、ESP压栈
+ 
  terminate_current_task:                        ;终止当前任务,
       ;设置当前繁忙的TCB节点为0x3333, 后续由do_task_clear负责内存等清理操作
       ;然后在切换到其他任务,这和do_switch很像
@@ -1142,7 +1228,7 @@ start:
    .init_tss:
       ;因特权级之间的转移而发生栈切换时，本系统只会发生3到0的切换（所有任务使用全局一个TSS）。因此，
       ;只需要TSS中设置SS0，且必须是0特权级的栈段选择子。
-      mov word [tss+8], flat_core_data_seg_sel
+      mov word [tss+8], flat_core_data_seg_sel  ;SS0
       mov dword [tss+100], 0x0067_0000          ;0x67=I/O映射基地址=103，I/O映射空
 
    .tss_to_gdt:
