@@ -860,17 +860,16 @@ SECTION core_code vfollows=core_data
       ret
  ;------------------------------------------------------------
  load_relocate_user_program:                    ;加载重定位用户程序，通过栈传递参数
-                                                ;输入：push 用户程序起始逻辑扇区号
-                                                ;      push 当前tcb起始线性地址
+                                                ;输入：PUSH 用户程序起始逻辑扇区号
+                                                ;      PUSH 当前TCB起始线性地址
                                                 ;返回：无
       pushad
 
-
       mov ebp, esp
-      ;ebp+11*4 = tcb起始线性地址
+      ;ebp+11*4 = TCB起始线性地址
       ;ebp+12*4 = 用户程序起始LBA
 
-      ;esi=tcb起始线性地址
+      ;esi=TCB起始线性地址
       mov esi, [ss:ebp+11*4]  
 
       ;TODO-Think: why? 假定以前创建过用户任务。此时内核任务页目录表的前半部分是有内容的，还保留着前一个用户任务的相关表项。
@@ -890,11 +889,11 @@ SECTION core_code vfollows=core_data
    .ldt:             
       mov ecx, 160                              ;为用户程序的LDT分配20个描述符
       mov ebx, esi                              ;TCB起始线性地址
-      call task_allocate_memory  ;ecx=分配内存的起始线性地址
+      call task_allocate_memory                 ;ECX=分配内存的起始线性地址
 
       ;LDT登记到TCB
-      mov dword [esi+0x0c], ecx              ;LDT起始线性地址
-      mov word [esi+0x0a], 0xffff            ;LDT段界限，0-1=0xffff 16位存储
+      mov dword [esi+0x0c], ecx                 ;LDT起始线性地址
+      mov word [esi+0x0a], 0xffff               ;LDT段界限，0-1=0xffff 16位存储
                                                 ;与GDT格式完全一样
    .get_user_program_size:
       mov eax, [ss:ebp+12*4]                    ;用户程序起始逻辑扇区号
@@ -934,7 +933,7 @@ SECTION core_code vfollows=core_data
 
    
    
-   .setup_user_program_descriptor:              ;DS=4GB、EDI=用户程序起始线性地址（将被修改）、ESI=TCB起始线性地址
+   .setup_user_program_descriptor:              ;EDI=用户程序起始线性地址（将被修改）、ESI=TCB起始线性地址
       pop edi                                   ;用户程序分配的内存（线性地址）    toA          
 
       ;文件头段描述符
@@ -1178,10 +1177,10 @@ SECTION core_code vfollows=core_data
 
    .create_tcb:
       mov ecx, 0x4a                             ;tcb size
-      call allocate_memory  ;ecx=分配内存的起始线性地址，TCB
-      mov dword [ecx+0x46], 0                ;用户任务虚拟内存空间中，下一个用于内存分配的起始线性地址
+      call allocate_memory                      ;ecx=分配内存的起始线性地址，TCB
+      mov dword [ecx+0x46], 0                   ;用户任务虚拟内存空间中，下一个用于内存分配的起始线性地址
                                                 ;低2GB是任务的私有空间
-      mov word [ecx+0x04], 0                 ;TCB状态，空闲
+      mov word [ecx+0x04], 0                    ;TCB状态，空闲
       call append_tcb
 
    .load_relocate:
@@ -1189,7 +1188,6 @@ SECTION core_code vfollows=core_data
       push ecx                                  ;ecx=当前用户任务TCB起始线性地址
       call load_relocate_user_program
 
-      xchg bx, bx
       mov ebx, msg_load_relocate_ok
       call put_string
    
@@ -1340,7 +1338,7 @@ start:
     .create_tcb:
       mov ecx, core_lin_tcb_addr                ;TCB分配改为手动分配，不使用动态分配
       mov word [ecx+0x04], 0xffff               ;TCB状态繁忙，该内核任务即将被运行
-      mov dword [ecx+0x46],core_lin_alloc_at    ;登记内核中可用于分配的起始线性地址
+      mov dword [ecx+0x46],core_lin_alloc_at    ;登记内核中可用于内存分配的起始线性地址
       call append_tcb                           ;输入：ECX
       mov esi, ecx
    ;ESI=TCB起始线性地址                              
@@ -1348,7 +1346,7 @@ start:
       mov ecx, 103
       mov [esi+0x12], ecx                       ;登记TSS界限到TCB
       inc ecx                                   ;TSS长度
-      call allocate_memory  ;输出：ECX=TSS起始线性地址
+      call allocate_memory                      ;输出：ECX=TSS起始线性地址
       
       mov [esi+0x14], ecx                       ;登记TSS基地址到TCB
       
@@ -1361,8 +1359,8 @@ start:
       mov dword [ecx+100], 0x0067_0000          ;0x67=I/O映射基地址，0特权级I/O读写不限制
 
    .tss_to_gdt:
-      mov eax, [esi+0x14]                    ;TSS基地址
-      movzx ebx, word [esi+0x12]             ;TSS界限值
+      mov eax, [esi+0x14]                       ;TSS基地址
+      movzx ebx, word [esi+0x12]                ;TSS界限值
       mov ecx, 0x0000_8900                      ;TSS描述符属性                                 
       call make_seg_descriptor
                                                 ;G DB L AVL=0000、段界限=0
@@ -1370,7 +1368,7 @@ start:
                                                 ;TODO-Tips：一会用Bochs测试一下，我猜测是高速缓冲器和内存都修改。猜测正确
       call install_gdt_descriptor
 
-      mov [esi+0x18], cx                     ;登记TSS选择子（在GDT中）TI=0、RPL=0到TCB
+      mov [esi+0x18], cx                        ;登记TSS选择子（在GDT中）TI=0、RPL=0到TCB
 
       ;ltr r16/m16 将TSS选择子（GDT中）送到tr寄存器，
       ;然后再去GDT中加载对应的TSS描述符到tr的描述符高速缓冲器中，并将B位置为1（繁忙）
