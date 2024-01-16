@@ -36,9 +36,9 @@
 
 ;=============================== header STR =================================
 SECTION header vstart=0x8004_0000
-      core_length      dd file_end       ;核心程序总长度#00
+      core_length      dd file_end              ;核心程序总长度#00
 
-      core_entry       dd start          ;核心代码段入口点#04
+      core_entry       dd start                 ;核心代码段入口点#04
 ;=============================== header END =========================================
 
 
@@ -237,8 +237,8 @@ SECTION sys_routine vfollows=header
       add ebx, [pgdt+2]                         ;偏移量+gdt起始线性地址=新描述符在GDT中的线性地址
 
       ;2.安装                                                                 
-      mov [es:ebx], eax                     
-      mov [es:ebx+4], edx
+      mov [ebx], eax                     
+      mov [ebx+4], edx
 
       ;3.更新GDT界限值
       add word [pgdt], 8
@@ -1166,9 +1166,9 @@ SECTION core_code vfollows=core_data
    .create_tcb:
       mov ecx, 0x4a                             ;tcb size
       call allocate_memory  ;ecx=分配内存的起始线性地址，TCB
-      mov dword [es:ecx+0x46], 0                ;用户任务虚拟内存空间中，下一个用于内存分配的起始线性地址
+      mov dword [ecx+0x46], 0                ;用户任务虚拟内存空间中，下一个用于内存分配的起始线性地址
                                                 ;低2GB是任务的私有空间
-      mov word [es:ecx+0x04], 0                 ;TCB状态，空闲
+      mov word [ecx+0x04], 0                 ;TCB状态，空闲
       call append_tcb
 
    .load_relocate:
@@ -1204,8 +1204,8 @@ start:
       mov ebx, idt_linear_address
       xor edi, edi
    .for_inside_install:
-      mov [es:ebx+edi*8], eax                      ;缺陷门描述符低32位
-      mov [es:ebx+edi*8+4], edx                    ;缺陷门描述符高32位
+      mov [ebx+edi*8], eax                      ;缺陷门描述符低32位
+      mov [ebx+edi*8+4], edx                    ;缺陷门描述符高32位
       inc edi
       cmp edi, 19
       jle .for_inside_install
@@ -1218,8 +1218,8 @@ start:
 
       mov ebx, idt_linear_address
    .for_install_external:
-      mov [es:ebx+edi*8], eax
-      mov [es:ebx+edi*8+4], edx
+      mov [ebx+edi*8], eax
+      mov [ebx+edi*8+4], edx
       inc edi
       cmp edi, 255
       jle .for_install_external                 ;edi<=255,则循环
@@ -1231,8 +1231,8 @@ start:
       call make_gate_descriptor
 
       mov ebx, idt_linear_address
-      mov [es:ebx+0x70*8], eax
-      mov [es:ebx+0x70*8+4], edx
+      mov [ebx+0x70*8], eax
+      mov [ebx+0x70*8+4], edx
  
  .load_idt:
       mov word [pidt], 256*8-1                  ;长度(字节数)-1
@@ -1316,30 +1316,30 @@ start:
 
     .create_tcb:
       mov ecx, core_lin_tcb_addr                ;TCB分配改为手动分配，不使用动态分配
-      mov word [es:ecx+0x04], 0xffff            ;TCB状态繁忙，该内核任务即将被运行
-      mov dword [es:ecx+0x46],core_lin_alloc_at ;登记内核中可用于分配的起始线性地址
+      mov word [ecx+0x04], 0xffff               ;TCB状态繁忙，该内核任务即将被运行
+      mov dword [ecx+0x46],core_lin_alloc_at    ;登记内核中可用于分配的起始线性地址
       call append_tcb                           ;输入：ECX
       mov esi, ecx
    ;ESI=TCB起始线性地址                              
    .create_tss:
       mov ecx, 103
-      mov [es:esi+0x12], ecx                    ;登记TSS界限到TCB
+      mov [esi+0x12], ecx                       ;登记TSS界限到TCB
       inc ecx                                   ;TSS长度
       call allocate_memory  ;输出：ECX=TSS起始线性地址
       
-      mov [es:esi+0x14], ecx                    ;登记TSS基地址到TCB
+      mov [esi+0x14], ecx                       ;登记TSS基地址到TCB
       
       ;初始化TSS各个字段
-      mov word [es:ecx+0], 0                    ;上一个任务的TSS选择子（现代操作系统不使用）
+      mov word [ecx+0], 0                       ;上一个任务的TSS选择子（现代操作系统不使用）
       ;0特权级的内核任务不需要不同的特权级栈（不能call到低特权级任务）
       mov eax, cr3
-      mov dword [es:ecx+28], eax                ;登记CR3(PDBR页目录表基地址)
-      mov word [es:ecx+96], 0                   ;LDT选择子（在GDT中）内核任务不需要，内核任务的内存描述符在GDT中安装
-      mov dword [es:ecx+100], 0x0067_0000       ;0x67=I/O映射基地址，0特权级I/O读写不限制
+      mov dword [ecx+28], eax                   ;登记CR3(PDBR页目录表基地址)
+      mov word [ecx+96], 0                      ;LDT选择子（在GDT中）内核任务不需要，内核任务的内存描述符在GDT中安装
+      mov dword [ecx+100], 0x0067_0000          ;0x67=I/O映射基地址，0特权级I/O读写不限制
 
    .tss_to_gdt:
-      mov eax, [es:esi+0x14]                    ;TSS基地址
-      movzx ebx, word [es:esi+0x12]             ;TSS界限值
+      mov eax, [esi+0x14]                    ;TSS基地址
+      movzx ebx, word [esi+0x12]             ;TSS界限值
       mov ecx, 0x0000_8900                      ;TSS描述符属性                                 
       call make_seg_descriptor
                                                 ;G DB L AVL=0000、段界限=0
@@ -1347,7 +1347,7 @@ start:
                                                 ;TODO-Tips：一会用Bochs测试一下，我猜测是高速缓冲器和内存都修改。猜测正确
       call install_gdt_descriptor
 
-      mov [es:esi+0x18], cx                     ;登记TSS选择子（在GDT中）TI=0、RPL=0到TCB
+      mov [esi+0x18], cx                     ;登记TSS选择子（在GDT中）TI=0、RPL=0到TCB
 
       ;ltr r16/m16 将TSS选择子（GDT中）送到tr寄存器，
       ;然后再去GDT中加载对应的TSS描述符到tr的描述符高速缓冲器中，并将B位置为1（繁忙）
