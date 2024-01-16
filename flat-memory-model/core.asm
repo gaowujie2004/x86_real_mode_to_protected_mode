@@ -584,30 +584,30 @@ SECTION sys_routine vfollows=header
       ;0个任务或1个任务
       mov eax, [tcb_head]
       or eax, eax
-      jz .return                                ;eax=0,一个任务都没有
+      jz .return                                ;EAX=0,一个任务都没有
       mov eax, [eax+0x00]                       ;cur=cur.next
       or eax, eax
       jz .return 
 
 
       mov eax, [tcb_head]
-   ;从头找一个繁忙的tcb（当前任务）
+   ;从头找一个繁忙的TCB（当前任务）
    .find_buzy_tcb:
       cmp word [eax+0x04], 0xffff               ;EAX当前TCB节点起始线性地址
-      cmove esi, eax                            ;找到繁忙节点,ESI=繁忙TCB起始线性地址
+      cmove esi, eax                            ;找到繁忙节点，ESI=当前任务TCB起始线性地址
       je .tail_find_idle_tcb                    ;找到繁忙节点                     
       mov eax, [eax+0x00]                       ;没找到，cur=cur.next
       jmp .find_buzy_tcb
 
 
-   ;ESI=繁忙TCB起始线性地址,留给最后使用
-   ;EDI=空闲TCB起始线性地址,留给最后使用
+   ;ESI=当前任务TCB起始线性地址，留给最后使用
+   ;EDI=新任务TCB起始线性地址，留给最后使用
    ;从繁忙节点的下一个节点开始找空闲节点
    .tail_find_idle_tcb:
       mov eax, [eax+0x00]                       ;EAX=繁忙TCB的下一个TCB起始线性地址
       or eax, eax                               ;是否到尾部?
-      jz .haed_find_idle_tab                     ;Y,从头找空闲节点
-      cmp word [eax+0x04], 0                    ;N,没有到尾部
+      jz .haed_find_idle_tab                    ;Y，从头找空闲节点
+      cmp word [eax+0x04], 0                    ;N，没有到尾部
       cmove edi, eax                            
       je .ok                                     
       jmp .tail_find_idle_tcb
@@ -617,23 +617,21 @@ SECTION sys_routine vfollows=header
       mov eax, [tcb_head]
       .for:
       cmp eax, esi
-      je .return                                ;cur=繁忙节点,还没找到空闲,说明根本没有空闲任务
+      je .return                                ;cur=当前任务TCB，还没找到空闲，说明根本没有空闲任务
       cmp word [eax+0x04], 0
       cmove edi, eax                            ;为0，则赋值
       je .ok
-      mov eax, [eax+0x00]                       ;不相等,cur=cur.next
+      mov eax, [eax+0x00]                       ;不相等，cur=cur.next
       jmp .for
 
-   ;ESI=繁忙TCB起始线性地址
-   ;EDI=空闲TCB起始线性地址
+   ;ESI=当前任务TCB起始线性地址
+   ;EDI=新任务TCB起始线性地址
    ;反转状态，准备切换
    .ok:
       not word [esi+0x04]                       ;将旧任务TCB状态改为空闲
       not word [edi+0x04]                       ;将空闲任务TCB改为忙,即将切换到该任务
       jmp far [edi+0x14]                        ;CPU硬件任务切换
-      ;edi空闲TCB即即将要切换到该任务执行
-      ;CPU发现以edi+0x14为首的6byte内存数据
-      ;其中低2byte数据是TSS选择子,CPU开始执行任务切换的工作
+      ;EDI=空闲TCB即即将要切换到该任务执行
 
    .return:
       popa
