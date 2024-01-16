@@ -414,7 +414,7 @@ SECTION sys_routine vfollows=header
 
       push ebx                                  ;to A
 
-      mov ebx, [ebx+0x46]                       ;本次内存分配的起始线性地址
+      mov ebx, [ebx+6]                          ;本次内存分配的起始线性地址
       mov eax, ebx                              ;eax暂存：本次内存分配的起始线性地址
       add ecx, ebx                              ;下一次内存分配的起始线性地址
 
@@ -443,7 +443,7 @@ SECTION sys_routine vfollows=header
    .write:
       pop ebx                                   ;A，指定任务的TCB节点线性地址
 
-      mov [ebx+0x46], ecx                       ;更新，下一次内存分配的起始线性地址
+      mov [ebx+6], ecx                       ;更新，下一次内存分配的起始线性地址
 
       mov ecx, eax                              ;return-value: 本次内存分配的起始线性地址
 
@@ -745,6 +745,8 @@ SECTION core_data vfollows=sys_routine
       pidt        dw 0                          ;IDT界限=长度-1
                   dd 0x0000_0000                ;IDT起始线性地址
 
+      tss         times 128 db 0                ;TODO-Why: 实际104，但为什么分配128？可能是出于内存对齐的考虑？
+
 
       core_buf    times 2048 db 0               ;内核数据缓冲区，不用被缓冲区吓到，本质上就是连续的内存，方便内核对数据进行加工、操作的
 
@@ -866,11 +868,11 @@ SECTION core_code vfollows=core_data
       pushad
 
       mov ebp, esp
-      ;ebp+11*4 = TCB起始线性地址
-      ;ebp+12*4 = 用户程序起始LBA
+      ;ebp+9*4 = TCB起始线性地址
+      ;ebp+10*4 = 用户程序起始LBA
 
-      ;esi=TCB起始线性地址
-      mov esi, [ss:ebp+11*4]  
+      ;ESI=TCB起始线性地址
+      mov esi, [ss:ebp+9*4]  
 
       ;TODO-Think: why? 假定以前创建过用户任务。此时内核任务页目录表的前半部分是有内容的，还保留着前一个用户任务的相关表项。
       ;如果不清除，那么，在内存分配的时候，内存分配例程会以为以前已经分配过，会使用前一个用户任务的相关物理页
@@ -885,18 +887,9 @@ SECTION core_code vfollows=core_data
       mov eax, cr3
       mov cr3, eax
 
-   ;ESI=TCB
-   .ldt:             
-      mov ecx, 160                              ;为用户程序的LDT分配20个描述符
-      mov ebx, esi                              ;TCB起始线性地址
-      call task_allocate_memory                 ;ECX=分配内存的起始线性地址
-
-      ;LDT登记到TCB
-      mov dword [esi+0x0c], ecx                 ;LDT起始线性地址
-      mov word [esi+0x0a], 0xffff               ;LDT段界限，0-1=0xffff 16位存储
-                                                ;与GDT格式完全一样
+         
    .get_user_program_size:
-      mov eax, [ss:ebp+12*4]                    ;用户程序起始逻辑扇区号
+      mov eax, [ss:ebp+10*4]                    ;用户程序起始逻辑扇区号
       mov ebx, core_buf      
       call read_disk_hard_0
 
@@ -911,19 +904,15 @@ SECTION core_code vfollows=core_data
    .task_allocate_memory:                           
       mov ecx, eax                              ;实际需要申请的内存数量(字节单位)
       mov ebx, esi                              ;TCB起始线性地址
-      ;输入ecx=预期分配的字节数、ebx=tcb起始线性地址；输出：ecx=分配的内存起始线性地址
+      ;输入: ECX=预期分配的字节数、EBX=TCB起始线性地址；
+      ;输出: ECX=内存分配的起始线性地址
       call task_allocate_memory
-      mov ebx, ecx                              ;暂存分配的线性地址
+      mov ebx, ecx                              ;用户程序分配的线性地址
 
-      ;用户程序起始线性地址登记到tcb
-      mov [esi+0x06], ebx
-
-   .load_user_program:
-   ;EAX=用户程序所占字节数(512对齐)
-      push ebx                                  ;暂存为用户程序分配的内存（线性地址）toA
-      shr eax, 9                                ;eax/512，2^9=512
+   .load_user_program:                          ;EAX=用户程序所占字节数(512对齐)
+      shr eax, 9                                ;EAX/512，2^9=512
       mov ecx, eax                              ;用户程序所占扇区数
-      mov eax, [ss:ebp+12*4]                    ;用户程序起始LBA                          
+      mov eax, [ss:ebp+10*4]                    ;用户程序起始LBA                          
       .read_more:
             ;ebx用户程序分配的内存起始线性地址，所以ds必须得是0-4GB（0为段基址）
             call read_disk_hard_0
@@ -932,238 +921,50 @@ SECTION core_code vfollows=core_data
             loop .read_more
 
    
-   
-   .setup_user_program_descriptor:              ;EDI=用户程序起始线性地址（将被修改）、ESI=TCB起始线性地址
-      pop edi                                   ;用户程序分配的内存（线性地址）    toA          
-
-      ;文件头段描述符
-      mov eax, edi                              ;段描述符基地址
-      mov ebx, [edi+0x04]                       
-      dec ebx                                   ;段界限
-      mov ecx, 0x0040_f200                      ;数据段属性; G DB L AVL=0100、段界限=0 | P DPL S=1_11_1、TYPE=0010；TODO-Tips：DPL=3
-      call make_seg_descriptor
-
-      mov ebx, esi
-      call install_ldt_descriptor
-      or cx, 0B00000000_00000_011               ;RPL=3
-      mov [edi+0x04], cx                        ;文件头大小字段以后=程序头部选择子
-      mov [esi+0x044],cx                        ;程序头部选择子，登记到TCB
-
-      ;代码段描述符
-      mov eax, edi
-      add eax, [edi+0x0c]                       ;代码段基地址
-      mov ebx, [edi+0x10]                       
-      dec ebx                                   ;段界限
-      mov ecx, 0x0040_f800                      ;代码段属性；G DB L AVL=0100、段界限=0 | P DPL S=1_11_1、TYPE=1000（只执行）；TODO-Tips：DPL=3
-      call make_seg_descriptor
-
-      mov ebx, esi                              ;TCB起始线性地址
-      call install_ldt_descriptor
-      or cx, 0B00000000_00000_011               ;RPL=3
-      mov [edi+0x0c], cx                        ;代码段选择子到用户程序头部相关字段
-
-
-      ;数据段描述符
-      mov eax, edi
-      add eax, [edi+0x14]                       ;数据段基地址
-      mov ebx, [edi+0x18]                       
-      dec ebx                                   ;段界限
-      mov ecx, 0x0040_f200                      ;数据段属性；G DB L AVL=0100、段界限=0 | P DPL S=1111、TYPE=0010（可读可写）
-      call make_seg_descriptor
-
-      mov ebx, esi                              ;TCB起始线性地址
-      call install_ldt_descriptor
-      or cx, 0B00000000_00000_011               ;RPL=3
-      mov [edi+0x14], cx                        ;数据段到用户程序头部相关字段
-
-      ;栈段描述符
-      mov eax, edi
-      add eax, [edi+0x1c]                       ;栈段基地址
-      mov ebx, [edi+0x20]                       
-      dec ebx                                   ;段界限
-      mov ecx, 0x0040_f200                      ;栈段属性；G DB L AVL=0100、段界限=0 | P DPL S=1111、TYPE=0010（可读可写）
-      call make_seg_descriptor
-
-      mov ebx, esi                              ;TCB起始线性地址
-      call install_ldt_descriptor
-      or cx, 0B00000000_00000_011  
-      mov [edi+0x1c], cx                        ;栈段选择子到用户程序头部相关字段
-
-   
-
    ;ESI=TCB起始线性地址
-   .create_PL_stack:                            ;创建不同特权级的栈段，放在LDT中
-      mov esi, [ss:ebp+11*4]                    ;TCB起始线性地址
+   .create_stack:                               ;创建不同特权级的栈段，登记到TCB
+      mov esi, [ss:ebp+9*4]                     ;TCB起始线性地址
       
-      ;创建0特权级栈_4kb长度，并登记到TCB
-      mov ecx, 0
-      mov [esi+0x1a], ecx                       ;段界限，实际长度是0+1
-      inc ecx
-      shl ecx, 12                               ;栈实际所占字节数(4KB对齐)
-      push ecx
+      ;动态分配3特权栈
+      mov ecx, 4096
       mov ebx, esi
-      call task_allocate_memory 
-                                                ;输入ecx=分配字节数、ebx=TCB；输出ecx=分配的内存的起始线性地址
-      mov [esi+0x1e], ecx                       ;0特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
-      ;栈内存段在LDT中安装
-      mov eax, ecx                              ;栈内存基地址
-      mov ebx, [esi+0x1a]                       ;段界限
-      mov ecx, 0x00c0_9200                      ;DPL=0
-      call make_seg_descriptor
+      call task_allocate_memory
+      mov ecx, [esi+6]                          ;TCB.下一次内存分配的起始线性地址
+      mov dword [esi+70], ecx                   ;TCB.ESP3
+
+      ;创建用于中断和调用门的0特权级栈空间
+      mov ecx, 4096
       mov ebx, esi
-      call install_ldt_descriptor               
-      and cx, 0B11111111_11111_1_00             ;RPL=00，默认就是00，这行代码可以忽略， CPL==0，CPL要与栈特权级时时刻刻相同
-      mov [esi+0x22], cx                        ;0特权级栈选择子（在LDT中），登记到TCB
-      pop dword [esi+0x24]                      ;栈长度（所占字节数），登记到TCB
+      call task_allocate_memory
+      mov ecx, [esi+6]                          ;TCB.下一次内存分配的起始线性地址
+      mov dword [esi+10], ecx                   ;TCB.ESP0
 
+   .create_user_pdt:
+      call create_copy_cur_pdir
+      mov [esi+22], eax                         ;TCB.CR3  
 
-      ;创建1特权级栈，CPL==RPL==栈段DPL，并登记到TCB
-      mov ecx, 0
-      mov [esi+0x28], ecx                       ;段界限，实际长度是0+1
-      inc ecx
-      shl ecx, 12                               ;栈实际所占字节数(4KB对齐)
-      push ecx
-      mov ebx, esi
-      call task_allocate_memory  
-                                                ;输入ecx=分配字节数、ebx=TCB；输出ecx=分配的内存的起始线性地址
-      mov [esi+0x2c], ecx                       ;1特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
-      ;栈内存段在LDT中安装
-      mov eax, ecx                              ;栈段基地址
-      mov ebx, [esi+0x28]                       ;段界限
-      mov ecx, 0x00c0_b200                      ;DPL=1
-      call make_seg_descriptor
-      mov ebx, esi
-      call install_ldt_descriptor
-      or cx, 0B00000000_00000_0_01              ;RPL=01，默认00
-      mov [esi+0x30], cx                        ;1特权级栈选择子（在LDT中），登记到TCB
-      pop dword [esi+0x32]                      ;栈长度（所占字节数），登记到TCB
-
-      ;创建2特权级栈，CPL==RPL==栈段DPL，并登记到TCB
-      mov ecx, 0
-      mov [esi+0x36], ecx                       ;段界限，实际长度是0+1
-      inc ecx
-      shl ecx, 12                               ;栈实际所占字节数(4KB对齐)
-      push ecx
-      mov ebx, esi
-      call task_allocate_memory 
-                                                ;输入ecx=分配字节数、ebx=TCB；输出ecx=分配的内存的起始线性地址
-      mov [esi+0x3a], ecx                       ;1特权级栈基地址,感觉是多余的,完全可以从LDT中获取到.
-      ;栈内存段在LDT中安装
-      mov eax, ecx                              ;栈段基地址
-      mov ebx, [esi+0x36]                       ;段界限
-      mov ecx, 0x00c0_d200                      ;DPL=2
-      call make_seg_descriptor
-      mov ebx, esi
-      call install_ldt_descriptor
-      or cx, 0B00000000_00000_0_10              ;RPL=02，默认00
-      mov [esi+0x3e], cx                        ;2特权级栈选择子（在LDT中）记录到TCB
-      pop dword [esi+0x40]                      ;栈长度（所占字节数）记录到TCB
-
-   .ldt_to_gdt:                                 ;安装LDT(整个表)到GDT中，因为LDT也是个内存段
-      mov eax, [esi+0x0c]                       ;LDT起始线性地址
-      movzx ebx, word [esi+0x0a]                ;LDT长度-1（整个表的长度-1）,LDT当前界限，最大64KB
-      mov ecx, 0x0000_8200                      ;LDT的属性。TODO-Think：为什么DPL=0
-      call make_seg_descriptor
-      call install_gdt_descriptor               ;CX=当前描述符选择子， TI=0、RPL=00
-      mov [esi+0x10], cx                        ;回填到TCB，LDT在GDT中的选择子
-
-   .create_tss:                                 ;创建当前任务的TSS
-      ;创建并将TSS登记到TCB中
-      mov ecx, 104                              ;TSS基准尺寸
-      dec ecx
-      mov [esi+0x12], cx                        ;登记到TCB，TSS段界限（16位）
-      inc ecx
-      call allocate_memory                      ;当前任务是内核，用户任务TSS分配在内核空间中
-      mov [esi+0x14], ecx                       ;登记到TCB，TSS起始线性地址
-
-      ;ECX=TSS起始线性地址
-      ;ESI=TCB起始线性地址
-      ;初始化TSS各个字段
-      mov word [ecx+0x00], 0                    ;前一个任务的TSS段选择子
-
-      stack_field:
-      mov eax, [esi+0x24]                    
-      mov dword [ecx+4], eax                    ;0特权级ESP
-
-      mov ax, [esi+0x22]                     
-      mov word [ecx+8], ax                      ;0特权级SS
-
-      mov eax, [esi+0x32]                    
-      mov dword [ecx+12], eax                   ;1特权级ESP
-
-      mov ax, [esi+0x30]                     
-      mov word [ecx+16], ax                     ;1特权级SS
-
-      mov eax, [esi+0x40]                    
-      mov dword [ecx+20], eax                   ;2特权级ESP
-
-      mov ax, [esi+0x3e]                     
-      mov word [ecx+24], ax                     ;2特权级SS
-
-      PDBR_field:
-      mov dword [ecx+28], 0                     ;CR3，当前为开启分页，暂时为0
-
-      ;第一次切换任务时，通用寄存器的内容不重要。
-      ;以后【切换任务】时旧任务的各个状态会被CPU自动保存到旧任务的TSS中
-      
-      eflags_field:                             ;IOPL、IF位相当重要，确保万无一失
-                                                ;当CPL>IOPL时不允许执行popf、iret，否则触发中断；可以执行cli、sti，但没有任何效果
+   .fill_tcb:
+      eflags_field:                             ;IOPL、IF位相当重要，确保万无一失；当CPL>IOPL时不允许执行popf、iret，否则触发中断；可以执行cli、sti，但没有任何效果
       pushf
       pop eax                                   ;EAX获取EFLAGS值
       or eax, 0x0000_0200                       ;IF=1响应中断、OF DF IF TF=0010=0x2
       and eax, 0xffff_4fff                      ;0100=0x4、IOPL=0，在数值上CPL<=IOPL则I/O读写不受限制
-      mov [ecx+36], eax                         ;TSS.EFLAGS
-      
-      eip_cs:
-      mov ebx, [esi+0x06]                       ;用户程序起始线性地址
+      mov [esi+74], eax                         ;TCB.EFLAGS
 
-      mov eax, [ebx+0x08]                       ;用户程序入口（已被重定位过）（在代码段内的偏移量）
-      mov [ecx+32], eax                         ;TSS.EIP
+      seg_field:
+      mov ax, flat_user_data_seg_sel
+      mov bx, flat_user_code_seg_sel
+      mov [esi+40], ax                          ;TCB.GS
+      mov [esi+38], ax                          ;TCB.FS
+      mov [esi+36], ax                          ;TCB.ES
+      mov [esi+34], ax                          ;TCB.DS
+      mov [esi+32], ax                          ;TCB.SS
+      mov [esi+30], bx                          ;TCB.CS
 
-      mov ax, [ebx+0x0c]                        ;用户程序代码段段选择子（已被重定位过）
-      mov [ecx+76], ax                          ;TSS.CS
-
-      ;TODO-Tips：应该担心ds是内核数据段，切换到用户态，用户程序就可以访问到内核数据了吗？
-      ;TODO-Todo：重点关注
-
-      .ss_field:
-      mov ax, [ebx+0x1c]                        ;用户程序栈段选择子（已被重定位过）
-                                                ;用户程序的栈内存目前不是内核动态分配，是由用户程序指定大小
-      mov [ecx+80], ax
-     
-      .ds_field:
-      mov ax, [ebx+0x04]                        ;用户程序头部段选择子
-      mov [ecx+84], ax                          ;TSS.ds=头部选择子
-
-      .es_fs_gs_field:
-      mov word [ecx+72], 0                      ;TSS.es
-      mov word [ecx+88], 0                      ;TSS.fs
-      mov word [ecx+92], 0                      ;TSS.gs
-      mov ax, [ebx+0x1c]
-      mov word [ecx+80], ax                     ;TSS.ss 
-
-      
-      ldt_field:
-      mov ax, [esi+0x10]
-      mov [ecx+96], ax                          ;LDT段选择子（在GDT中）
-
-      iomap_field:
-      mov dword [ecx+100], 0x0067_0000          ;T=0、I/O映射基地址=0x0067=103（无IO许可位）
-
-   .tss_to_gdt:
-      mov eax, [esi+0x14]                       ;TSS起始线性地址
-      movzx ebx, word [esi+0x12]                ;段界限
-      mov ecx, 0x0000_8900                      ;TSS内存段描述符属性
-                                                ;P DPL S=1000 \ TYPE=1001，B位=0
-      call make_seg_descriptor
-      call install_gdt_descriptor
-      mov [esi+0x18], cx                        ;登记TSS选择子到TCB，PRL=00， CPL&RPL <=0 才能访问该数据段。
-                                                ;TODO-Tips：从这里也能看出，RPL是由操作系统控制的，CPU只负责检查RPL与CPL的合法性，不负责鉴别PRL的真实性，真实性由操作系统鉴别。
-      
-   .create_user_page_dir:                       ;创建用户任务页目录表
-      call create_copy_cur_pdir
-      mov ebx, [esi+0x14]                       ;ESI=TCB起始线性地址，TSS起始线性地址
-      mov [ebx+28], eax                         ;TSS.CR3
+      eip_field:
+      mov eax, [0x04]                           ;0x04是程序入口点，用户程序加载到起始线性地址0x0000
+                                                ;当前任务还在内核中，页目录表是内核的，但内核页目录表与用户任务页目录表内容一致
+      mov [esi+26], eax                         ;TCB.EIP 
 
    .return:
       popad
@@ -1176,16 +977,15 @@ SECTION core_code vfollows=core_data
       push ebx
 
    .create_tcb:
-      mov ecx, 0x4a                             ;tcb size
-      call allocate_memory                      ;ecx=分配内存的起始线性地址，TCB
-      mov dword [ecx+0x46], 0                   ;用户任务虚拟内存空间中，下一个用于内存分配的起始线性地址
-                                                ;低2GB是任务的私有空间
-      mov word [ecx+0x04], 0                    ;TCB状态，空闲
+      mov ecx, 128                              ;TCB Size，TODO-Think: 实际大小74
+      call allocate_memory                      ;ECX=TCB分配内存的起始线性地址，
+      mov dword [ecx+6], 0                      ;TCB.用户任务虚拟内存空间中，下一个用于内存分配的起始线性地址。低2GB是任务的私有空间
+      mov word [ecx+4], 0                       ;TCB.状态=空闲
       call append_tcb
 
    .load_relocate:
-      push dword edi
-      push ecx                                  ;ecx=当前用户任务TCB起始线性地址
+      push dword edi                            ;EDI=用户程序起始逻辑扇区号
+      push ecx                                  ;ECX=当前用户任务TCB起始线性地址
       call load_relocate_user_program
 
       mov ebx, msg_load_relocate_ok
@@ -1337,30 +1137,19 @@ start:
 
     .create_tcb:
       mov ecx, core_lin_tcb_addr                ;TCB分配改为手动分配，不使用动态分配
-      mov word [ecx+0x04], 0xffff               ;TCB状态繁忙，该内核任务即将被运行
-      mov dword [ecx+0x46],core_lin_alloc_at    ;登记内核中可用于内存分配的起始线性地址
+      mov word [ecx+4], 0xffff                  ;TCB状态繁忙，该内核任务即将被运行
+      mov dword [ecx+6],core_lin_alloc_at       ;登记内核中可用于内存分配的起始线性地址
       call append_tcb                           ;输入：ECX
-      mov esi, ecx
-   ;ESI=TCB起始线性地址                              
-   .create_tss:
-      mov ecx, 103
-      mov [esi+0x12], ecx                       ;登记TSS界限到TCB
-      inc ecx                                   ;TSS长度
-      call allocate_memory                      ;输出：ECX=TSS起始线性地址
-      
-      mov [esi+0x14], ecx                       ;登记TSS基地址到TCB
-      
-      ;初始化TSS各个字段
-      mov word [ecx+0], 0                       ;上一个任务的TSS选择子（现代操作系统不使用）
-      ;0特权级的内核任务不需要不同的特权级栈（不能call到低特权级任务）
-      mov eax, cr3
-      mov dword [ecx+28], eax                   ;登记CR3(PDBR页目录表基地址)
-      mov word [ecx+96], 0                      ;LDT选择子（在GDT中）内核任务不需要，内核任务的内存描述符在GDT中安装
-      mov dword [ecx+100], 0x0067_0000          ;0x67=I/O映射基地址，0特权级I/O读写不限制
+
+   .init_tss:
+      ;因特权级之间的转移而发生栈切换时，本系统只会发生3到0的切换（所有任务使用全局一个TSS）。因此，
+      ;只需要TSS中设置SS0，且必须是0特权级的栈段选择子。
+      mov word [tss+8], flat_core_data_seg_sel
+      mov dword [tss+100], 0x0067_0000          ;0x67=I/O映射基地址=103，I/O映射空
 
    .tss_to_gdt:
-      mov eax, [esi+0x14]                       ;TSS基地址
-      movzx ebx, word [esi+0x12]                ;TSS界限值
+      mov eax, tss                              ;TSS起始线性地址
+      mov ebx, 103                              ;TSS界限值
       mov ecx, 0x0000_8900                      ;TSS描述符属性                                 
       call make_seg_descriptor
                                                 ;G DB L AVL=0000、段界限=0
@@ -1368,13 +1157,11 @@ start:
                                                 ;TODO-Tips：一会用Bochs测试一下，我猜测是高速缓冲器和内存都修改。猜测正确
       call install_gdt_descriptor
 
-      mov [esi+0x18], cx                        ;登记TSS选择子（在GDT中）TI=0、RPL=0到TCB
-
       ;ltr r16/m16 将TSS选择子（GDT中）送到tr寄存器，
       ;然后再去GDT中加载对应的TSS描述符到tr的描述符高速缓冲器中，并将B位置为1（繁忙）
       ;任务寄存器TR中的内容是任务存在的标志，该内容也决定了当前任务是谁。
       ;下面的指令为当前正在执行的0特权级任务“程序管理器”后补手续（TSS）。
-      ;当前任务是内核任务，TR指向内核任务的TSS
+      ;以后都不修改 TR
       ltr cx                                 
 
       mov ebx, msg_core_task_run
