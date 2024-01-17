@@ -274,18 +274,15 @@ SECTION sys_routine vfollows=header
       push edx
       push ecx
       push ebx
-      push ebp
-
 
    .chech_RPL:
       ;TODO-Tips：从这里也能看出，RPL是由操作系统控制的，CPU只负责检查RPL与CPL的合法性，不负责鉴别PRL的真实性，真实性由操作系统鉴别。
       ;操作系统很显然是知道请求者的CPL的，这样就可以判断并修改RPL
       ;在平坦模式下调用该函数，采用的是相对调用，不会压入CS，那么此时从栈中取出的CS就是错的
       ;保险的方法是从TCB链表中取出CS?
-
-      mov ebp, esp
-      mov cx, ds
-      mov dx, [ss:ebp+6*4]                      ;调用者CS
+      xchg bx, bx
+      mov cx, ds                    
+      call get_current_task_pl                  ;输出：DX=调用者CS
       arpl cx, dx                               ;调整ds
       mov ds, cx
 
@@ -345,7 +342,6 @@ SECTION sys_routine vfollows=header
   .error:                                       ;TODO-Todo：代办项，加载内核时，对错误打印。
 
   .return:
-      pop ebp
       pop ebx
       pop ecx
       pop edx 
@@ -724,6 +720,27 @@ SECTION sys_routine vfollows=header
       ;3. 改变SS、ESP寄存器为TSS中同特权级的栈
       ;4. 将旧的SS、ESP压栈
  
+ get_current_task_pl:                           ;获取当前任务的特权级
+                                                ;输入：无
+                                                ;输出：DX=任务的特权级
+      push eax
+
+      mov eax, [tcb_head]
+   ;从头找当前任务TCB
+   .find_buzy_tcb:
+      cmp word [eax+0x04], 0xffff               ;EAX当前TCB节点起始线性地址
+      je .ok                                    ;找到当前节点               
+      mov eax, [eax+0x00]                       ;没找到，cur=cur.next
+      jmp .find_buzy_tcb
+
+   ;EAX=当前任务TCB起始线性地址
+   .ok:
+      mov dx, [eax+78]
+
+   .return:
+      pop eax
+      ret
+ 
  terminate_current_task:                        ;终止当前任务,
       ;设置当前繁忙的TCB节点为0x3333, 后续由do_task_clear负责内存等清理操作
       ;然后在切换到其他任务,这和do_switch很像
@@ -1062,8 +1079,9 @@ SECTION core_code vfollows=core_data
       push ebx
 
    .create_tcb:
-      mov ecx, 128                              ;TCB Size，TODO-Think: 实际大小74
-      call allocate_memory                      ;ECX=TCB分配内存的起始线性地址，
+      mov ecx, 128                              ;TCB Size，TODO-Think: 实际大小80
+      call allocate_memory                      ;ECX=TCB分配内存的起始线性地址（内核任务的全局空间下）
+      mov dword [ecx+78], flat_user_code_seg_sel;自定义TCB字段：任务字段，用于系统api判断调用者RPL与真实特权级是否匹配
       mov dword [ecx+6], 0                      ;TCB.用户任务虚拟内存空间中，下一个用于内存分配的起始线性地址。低2GB是任务的私有空间
       mov word [ecx+4], 0                       ;TCB.状态=空闲
       call append_tcb
@@ -1221,9 +1239,10 @@ start:
       cli                                       ;TODO-Tips:创建任务的过程中，关闭外中断
 
     .create_tcb:
-      mov ecx, core_lin_tcb_addr                ;TCB分配改为手动分配，不使用动态分配
+      mov ecx, core_lin_tcb_addr                ;TCB分配改为手动分配
       mov word [ecx+4], 0xffff                  ;TCB状态繁忙，该内核任务即将被运行
-      mov dword [ecx+6],core_lin_alloc_at       ;登记内核中可用于内存分配的起始线性地址
+      mov dword [ecx+6], core_lin_alloc_at      ;登记内核中可用于内存分配的起始线性地址
+      mov dword [ecx+78], flat_core_code_seg_sel;自定义TCB字段：任务字段，用于系统api判断调用者RPL与真实特权级是否匹配
       call append_tcb                           ;输入：ECX
 
    .init_tss:
