@@ -126,14 +126,14 @@ SECTION MBR vstart=0x7c00
       mov [ebx+edi], eax                        ;页表项值
       add edi, 4                                ;页表偏移量
       add esi, 0x1000                           ;页物理地址（低端1MB物理页）
-      cmp edi, 256                              ;1MB内存需要256个物理页
+      cmp edi, 256*4                            ;1MB内存需要256个物理页
       jl .set_pt                                ;小于256，则继续循环
 
       ;清空剩余页表项
    .clear_pt:
       mov dword [ebx+edi], 0
       add edi, 4
-      cmp edi, 1024
+      cmp edi, 1024*4
       jl .clear_pt
 
    .pdbr:
