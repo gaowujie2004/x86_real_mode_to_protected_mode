@@ -112,8 +112,9 @@ SECTION MBR vstart=0x7c00
       loop .clear_pdt
    
    .init_item:                                  ;0x8000_0000-0x8010_0000（虚拟地址）映射到 0x0000_0000-0x0010_0000（物理地址）
-      mov dword [ebx+0xffc], 0x0002_0003 ;倒数第一个目录项，TODO-Tips: 可用来定位页目录表自身
-      mov dword [ebx+0x800], 0x0002_1003 ;线性地址0x8000_0000对应的目录项
+      mov dword [ebx+0xffc], 0x0002_0003        ;倒数第一个目录项，TODO-Tips: 可用来定位页目录表自身
+      mov dword [ebx+0x800], 0x0002_1003        ;线性地址0x8000_0000对应的目录项
+      mov dword [ebx+0x000], 0x0002_1003        ;如果没有将物理地址0-0xfffff映射到线性地址0-0xfffff，那么会有问题
 
       ;设置低端1MB物理内存对应的页表项
       mov ebx, core_low_1mb_pt_address          ;页表物理地址
@@ -122,7 +123,7 @@ SECTION MBR vstart=0x7c00
    .set_pt:
       mov eax, esi
       or eax, 0x0000_0003
-      mov [ebx+edi], eax           ;页表项值
+      mov [ebx+edi], eax                        ;页表项值
       add edi, 4                                ;页表偏移量
       add esi, 0x1000                           ;页物理地址（低端1MB物理页）
       cmp edi, 256                              ;1MB内存需要256个物理页
@@ -131,6 +132,7 @@ SECTION MBR vstart=0x7c00
       ;清空剩余页表项
    .clear_pt:
       mov dword [ebx+edi], 0
+      add edi, 4
       cmp edi, 1024
       jl .clear_pt
 
@@ -155,6 +157,10 @@ SECTION MBR vstart=0x7c00
       ;都移到高端，否则，一定会和正在加载的用户任务局部空间里的内容冲突，
       ;而且很难想到问题会出在这里。 
       add esp, 0x8000_0000
+
+  ;TODO-Tips: 如果没有将物理地址0-0xfffff映射到线性地址0-0xfffff，那么会有问题
+  ;因为：EIP=还是原先的物理地址0x7xxx，所以必须先把物理地址0-0xfffff映射到线性地址0-0xfffff
+  ;然后跳转到内核代码段即可
  
  .enter_core: 
       ;已开启分页部件
