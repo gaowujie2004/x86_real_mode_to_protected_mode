@@ -280,7 +280,6 @@ SECTION sys_routine vfollows=header
       ;操作系统很显然是知道请求者的CPL的，这样就可以判断并修改RPL
       ;在平坦模式下调用该函数，采用的是相对调用，不会压入CS，那么此时从栈中取出的CS就是错的
       ;保险的方法是从TCB链表中取出CS?
-      xchg bx, bx
       mov cx, ds                    
       call get_current_task_pl                  ;输出：DX=调用者CS
       arpl cx, dx                               ;调整ds
@@ -692,21 +691,24 @@ SECTION sys_routine vfollows=header
       mov esi, [edi + 58]
       mov ebp, [edi + 66]
 
-      cmp word [edi+30], 3                      ;TCB.CS.DPL == 3? 和比较TCB.SS是一样的
+      ;目前假设只有0、3特权级，以后可能会新增。
+      cmp word [edi+30], flat_user_code_seg_sel ;TCB.CS.DPL == 3? 和比较TCB.SS是一样的
       je .stack_switch                          ;新任务CS.DPL=3，意味着栈切换了，执行ret、iret时会将栈中旧的SS、ESP弹栈，赋值给SS、ESP寄存器
       ;CPL==TCB.SS.DPL==0，可以直接切换栈，因为CPL==栈DPL。CPU要求时时刻刻CPL==SS.DPL
       mov ss, [edi+32]                          ;TCB.SS  0特权级栈
       mov esp, [edi+70]                         ;TCB.ESP 0特权级栈
+      jmp .do_sw
 
    .stack_switch:
       ;新任务的CS.DPL=3，模拟栈切换返回过程
-      push word [edi+32]                        ;TCB.SS   3特权级
+      push dword [edi+32]                        ;TCB.SS   3特权级
       push dword [edi+70]                       ;TCB.ESP  3特权级
       
    .do_sw:
-      ;无论push的是word还是dword，实际压栈的还是dword大小的数据，不足dword自动补零
+      ;在32位模式下，如果压入的是字操作数，那么先将ESP的内容减去2；如果压入的是双字，应当先将ESP的内容减去4
+      ;猜测CPU取值的时候，发现是32位保护模式，那么在栈中取数据就默认都是双字（4byte）
       push dword [edi+74]                       ;TCB.EFLAGS
-      push word  [edi+30]                       ;TCB.CS
+      push dword  [edi+30]                      ;TCB.CS
       push dword [edi+26]                       ;TCB.EIP                                     
 
       mov edi, [edi+62]
