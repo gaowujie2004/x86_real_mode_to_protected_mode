@@ -701,7 +701,7 @@ SECTION sys_routine vfollows=header
 
    .stack_switch:
       ;新任务的CS.DPL=3，模拟栈切换返回过程
-      push dword [edi+32]                        ;TCB.SS   3特权级
+      push dword [edi+32]                       ;TCB.SS   3特权级
       push dword [edi+70]                       ;TCB.ESP  3特权级
       
    .do_sw:
