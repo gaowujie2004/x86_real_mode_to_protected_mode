@@ -92,7 +92,8 @@ SECTION sys_routine vfollows=header
       jmp .scroll_check
 
       ;可显示的字符，cl=字符值
-   .put_other:                                          
+   .put_other:
+      mov eax, 0                                ;eax高16位可能不干净                                          
       mov ax, bx
       shl eax, 1                                ;乘2
       mov [text_buffer_lin_address + eax], cl    
@@ -138,8 +139,6 @@ SECTION sys_routine vfollows=header
       out dx, al                                ;文本模式光标寄存器高8位
 
    .put_char_return:
-      pop es
-      pop ds
       popa
       ret
 
