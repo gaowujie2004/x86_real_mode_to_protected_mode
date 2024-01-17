@@ -580,7 +580,6 @@ SECTION sys_routine vfollows=header
       ;怎么进行任务切换？从TCB链表找到繁忙的任务，即当前调用initiative_task_switch的任务的tcb，从这个tcb开始向后找一个空闲的tcb
       ;若向后找不到，则从头开始找，都没找到就退出，任务不切换；若找到了，则把找到的空闲节点的状态反转（变为0xffff，即将开始运行这个任务）
       ;将旧任务（当前任务）的tcb状态也反转一下，变为0，表示空闲。
-      ;jmp far 指向tss选择子，即可由硬件完成任务切换
       push eax
       push ebx
       push esi
