@@ -280,6 +280,9 @@ SECTION sys_routine vfollows=header
    .chech_RPL:
       ;TODO-Tips：从这里也能看出，RPL是由操作系统控制的，CPU只负责检查RPL与CPL的合法性，不负责鉴别PRL的真实性，真实性由操作系统鉴别。
       ;操作系统很显然是知道请求者的CPL的，这样就可以判断并修改RPL
+      ;在平坦模式下调用该函数，采用的是相对调用，不会压入CS，那么此时从栈中取出的CS就是错的
+      ;保险的方法是从TCB链表中取出CS?
+
       mov ebp, esp
       mov cx, ds
       mov dx, [ss:ebp+6*4]                      ;调用者CS
